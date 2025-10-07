@@ -1,2 +1,0 @@
-# wwwngtcom
-Web2
