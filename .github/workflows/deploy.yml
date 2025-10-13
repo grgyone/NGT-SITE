@@ -1,0 +1,28 @@
+name: Deploy static site to Pages
+
+on:
+  push:
+    branches: [ main ]     # если у тебя главная ветка другая — поменяй
+  workflow_dispatch:       # позволяет запустить руками из Actions
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ⚠️ У ТЕБЯ ЧИСТЫЙ СТАТИЧЕСКИЙ САЙТ БЕЗ СБОРКИ
+      # Просто отдаём корень репозитория как артефакт
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .   # публикуем все файлы из корня (index.html, styles.css, app.js, about.html, contacts.html, logo.png, 0.png, bag.png, favicon.ico)
+
+      - name: Deploy to Pages
+        uses: actions/deploy-pages@v4
