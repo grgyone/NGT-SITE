@@ -1,0 +1,187 @@
+:root {
+  --color-background: #ffffff;
+  --color-border: #e5e5e5;
+  --color-text: #111111;
+  --color-text-muted: #4d4d4d;
+  --color-footer-border: #dddddd;
+  --font-base: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-base);
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--color-text);
+  background-color: var(--color-background);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background-color: var(--color-background);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.brand-logo {
+  display: block;
+  width: 120px;
+  height: auto;
+  max-height: 48px;
+}
+
+.brand-text {
+  display: none;
+}
+
+.cart-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: default;
+  font-size: 16px;
+  padding: 4px 0;
+}
+
+.cart-button:focus {
+  outline: 2px solid var(--color-text);
+  outline-offset: 2px;
+}
+
+.cart-icon {
+  width: 24px;
+  height: 24px;
+  fill: currentColor;
+}
+
+.cart-count {
+  font-weight: 600;
+  min-width: 16px;
+  text-align: center;
+}
+
+.product-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(2, 1fr);
+  padding-top: 32px;
+  padding-bottom: 64px;
+}
+
+@media (min-width: 768px) {
+  .product-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 1280px) {
+  .product-grid {
+    grid-template-columns: repeat(5, 1fr);
+    gap: 24px;
+  }
+}
+
+.product-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.product-image-wrapper {
+  width: 100%;
+  background-color: var(--color-border);
+}
+
+.product-image {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  display: block;
+}
+
+.product-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.product-price {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 15px;
+}
+
+.site-footer {
+  border-top: 1px solid var(--color-footer-border);
+  background-color: var(--color-background);
+  padding: 24px 0;
+}
+
+.footer-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.footer-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 14px;
+}
+
+.footer-link {
+  color: var(--color-text-muted);
+}
+
+.footer-link:hover,
+.footer-link:focus {
+  color: var(--color-text);
+}
+
+.footer-copy {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}

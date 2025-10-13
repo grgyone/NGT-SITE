@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="./favicon.ico">
+  <link rel="stylesheet" href="./styles.css">
+  <title>NEW GRGY TIMES — Store</title>
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="./">
+        <img src="./logo.png" alt="NEW GRGY TIMES" class="brand-logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';">
+        <span class="brand-text">NEW GRGY TIMES</span>
+      </a>
+      <button class="cart-button" type="button" aria-label="Корзина">
+        <svg class="cart-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M7 4h-2l-1 2v2h2l3 8h10l3-8h2v-2l-1-2h-2l-1 2h-10l-1-2zm3 10-2-6h12l-2 6h-8zm-1 4a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm8 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
+        </svg>
+        <span class="cart-count" aria-live="polite">0</span>
+      </button>
+    </div>
+  </header>
+  <main class="container">
+    <section id="grid" class="product-grid" aria-label="Список товаров"></section>
+  </main>
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <nav class="footer-nav" aria-label="Дополнительные ссылки">
+        <a href="#!" class="footer-link">Каталог</a>
+        <a href="#!" class="footer-link">Доставка</a>
+        <a href="#!" class="footer-link">Контакты</a>
+      </nav>
+      <p class="footer-copy">&copy; 2024 NEW GRGY TIMES. Все права защищены.</p>
+    </div>
+  </footer>
+  <script src="./app.js"></script>
+</body>
+</html>
