@@ -1,3 +1,4 @@
 export function formatCurrency(value: number, currency = 'RUB') {
-  return `${value.toLocaleString('ru-RU')} ₽`;
+  const symbol = currency === 'RUB' ? '\u20bd' : currency;
+  return `${value.toLocaleString('ru-RU')} ${symbol}`;
 }

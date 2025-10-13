@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react';
 
+const READ_WARNING =
+  '\u041d\u0435\u0020\u0443\u0434\u0430\u043b\u043e\u0441\u044c\u0020\u043f\u0440\u043e\u0447\u0438\u0442\u0430\u0442\u044c\u0020localStorage\u0020\u0434\u043b\u044f\u0020\u043a\u043b\u044e\u0447\u0430\u0020';
+const WRITE_WARNING =
+  '\u041d\u0435\u0020\u0443\u0434\u0430\u043b\u043e\u0441\u044c\u0020\u043e\u0431\u043d\u043e\u0432\u0438\u0442\u044c\u0020localStorage\u0020\u0434\u043b\u044f\u0020\u043a\u043b\u044e\u0447\u0430\u0020';
+
 export function useLocalStorage<T>(key: string, defaultValue: T) {
   const [value, setValue] = useState<T>(() => {
     if (typeof window === 'undefined') {
@@ -10,7 +15,7 @@ export function useLocalStorage<T>(key: string, defaultValue: T) {
       const stored = window.localStorage.getItem(key);
       return stored ? (JSON.parse(stored) as T) : defaultValue;
     } catch (error) {
-      console.warn(`Не удалось прочитать localStorage для ключа ${key}`, error);
+      console.warn(`${READ_WARNING}${key}`, error);
       return defaultValue;
     }
   });
@@ -23,7 +28,7 @@ export function useLocalStorage<T>(key: string, defaultValue: T) {
     try {
       window.localStorage.setItem(key, JSON.stringify(value));
     } catch (error) {
-      console.warn(`Не удалось обновить localStorage для ключа ${key}`, error);
+      console.warn(`${WRITE_WARNING}${key}`, error);
     }
   }, [key, value]);
 
