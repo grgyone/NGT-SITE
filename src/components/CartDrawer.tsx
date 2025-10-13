@@ -81,13 +81,13 @@ export function CartDrawer({
   const validate = () => {
     const newErrors: Record<string, string> = {};
     if (!form.name.trim()) {
-      newErrors.name = '\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0438\u043c\u044f';
+      newErrors.name = 'Введите имя';
     }
     if (!form.phone.trim()) {
-      newErrors.phone = '\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0442\u0435\u043b\u0435\u0444\u043e\u043d';
+      newErrors.phone = 'Введите телефон';
     }
     if (form.delivery === 'courier' && !form.city.trim()) {
-      newErrors.city = '\u0423\u043a\u0430\u0436\u0438\u0442\u0435 \u0433\u043e\u0440\u043e\u0434 \u0438\u043b\u0438 \u0430\u0434\u0440\u0435\u0441 \u0434\u043e\u0441\u0442\u0430\u0432\u043a\u0438';
+      newErrors.city = 'Укажите город или адрес доставки';
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -96,7 +96,7 @@ export function CartDrawer({
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (items.length === 0) {
-      setErrors({ general: '\u0414\u043e\u0431\u0430\u0432\u044c\u0442\u0435 \u0442\u043e\u0432\u0430\u0440\u044b \u0432 \u043a\u043e\u0440\u0437\u0438\u043d\u0443' });
+      setErrors({ general: 'Добавьте товары в корзину' });
       return;
     }
     if (!validate()) {
@@ -119,20 +119,20 @@ export function CartDrawer({
       <button
         type="button"
         className="h-full w-full bg-black/30"
-        aria-label="\u0417\u0430\u043a\u0440\u044b\u0442\u044c \u043a\u043e\u0440\u0437\u0438\u043d\u0443"
+        aria-label="Закрыть корзину"
         onClick={onClose}
       />
       <aside className="flex h-full w-full max-w-md flex-col border-l border-black/15 bg-white">
         <header className="flex items-center justify-between border-b border-black/10 px-6 py-4">
-          <h2 className="text-lg font-semibold uppercase text-black">\u041a\u043e\u0440\u0437\u0438\u043d\u0430</h2>
+          <h2 className="text-lg font-semibold uppercase text-black">Корзина</h2>
           <button type="button" className="text-sm uppercase text-neutral-600 hover:text-black" onClick={onClose}>
-            \u0417\u0430\u043a\u0440\u044b\u0442\u044c
+            Закрыть
           </button>
         </header>
         <div className="flex-1 overflow-y-auto px-6 py-4">
           {items.length === 0 ? (
             <p className="text-sm text-neutral-600">
-              \u0414\u043e\u0431\u0430\u0432\u044c\u0442\u0435 \u0442\u043e\u0432\u0430\u0440\u044b, \u0447\u0442\u043e\u0431\u044b \u043e\u0444\u043e\u0440\u043c\u0438\u0442\u044c \u0437\u0430\u043a\u0430\u0437.
+              Добавьте товары, чтобы оформить заказ.
             </p>
           ) : (
             <ul className="flex flex-col gap-4">
@@ -161,7 +161,7 @@ export function CartDrawer({
                         className="text-xs uppercase text-neutral-500 hover:text-black"
                         onClick={() => onRemoveItem(item.product.id)}
                       >
-                        \u0423\u0434\u0430\u043b\u0438\u0442\u044c
+                        Удалить
                       </button>
                     </div>
                     <div className="flex items-center justify-between">
@@ -171,7 +171,7 @@ export function CartDrawer({
                           className="px-2 py-2 text-sm text-black hover:bg-black hover:text-white disabled:bg-neutral-200 disabled:text-neutral-500"
                           onClick={() => onUpdateQuantity(item.product.id, Math.max(1, item.quantity - 1))}
                           disabled={item.quantity <= 1}
-                          aria-label="\u041c\u0435\u043d\u044c\u0448\u0435"
+                          aria-label="Меньше"
                         >
                           -
                         </button>
@@ -187,7 +187,7 @@ export function CartDrawer({
                             onUpdateQuantity(item.product.id, clamped);
                           }}
                           className="w-12 border-x border-black/40 py-1 text-center text-xs focus:outline-none"
-                          aria-label="\u041a\u043e\u043b\u0438\u0447\u0435\u0441\u0442\u0432\u043e"
+                          aria-label="Количество"
                         />
                         <button
                           type="button"
@@ -196,7 +196,7 @@ export function CartDrawer({
                             onUpdateQuantity(item.product.id, Math.min(item.product.stock, item.quantity + 1))
                           }
                           disabled={item.quantity >= item.product.stock}
-                          aria-label="\u0411\u043e\u043b\u044c\u0448\u0435"
+                          aria-label="Больше"
                         >
                           +
                         </button>
@@ -214,7 +214,7 @@ export function CartDrawer({
         <form className="border-t border-black/10 px-6 py-4" onSubmit={handleSubmit}>
           <div className="flex flex-col gap-3">
             <label className="flex flex-col gap-1 text-xs uppercase text-neutral-600">
-              \u0418\u043c\u044f *
+              Имя *
               <input
                 type="text"
                 value={form.name}
@@ -225,7 +225,7 @@ export function CartDrawer({
               {errors.name && <span className="text-xs text-red-600">{errors.name}</span>}
             </label>
             <label className="flex flex-col gap-1 text-xs uppercase text-neutral-600">
-              \u0422\u0435\u043b\u0435\u0444\u043e\u043d *
+              Телефон *
               <input
                 type="tel"
                 value={form.phone}
@@ -236,7 +236,7 @@ export function CartDrawer({
               {errors.phone && <span className="text-xs text-red-600">{errors.phone}</span>}
             </label>
             <fieldset className="flex flex-col gap-2 border border-black/20 p-3 text-xs uppercase text-neutral-600">
-              <legend className="px-1">\u0421\u043f\u043e\u0441\u043e\u0431 \u0434\u043e\u0441\u0442\u0430\u0432\u043a\u0438</legend>
+              <legend className="px-1">Способ доставки</legend>
               <label className="flex items-center gap-2 text-[11px] normal-case text-black">
                 <input
                   type="radio"
@@ -245,7 +245,7 @@ export function CartDrawer({
                   checked={form.delivery === 'pickup'}
                   onChange={() => setForm((prev) => ({ ...prev, delivery: 'pickup' }))}
                 />
-                \u041f\u0412\u0417
+                ПВЗ
               </label>
               <label className="flex items-center gap-2 text-[11px] normal-case text-black">
                 <input
@@ -255,12 +255,12 @@ export function CartDrawer({
                   checked={form.delivery === 'courier'}
                   onChange={() => setForm((prev) => ({ ...prev, delivery: 'courier' }))}
                 />
-                \u041a\u0443\u0440\u044c\u0435\u0440
+                Курьер
               </label>
             </fieldset>
             {form.delivery === 'courier' && (
               <label className="flex flex-col gap-1 text-xs uppercase text-neutral-600">
-                \u0413\u043e\u0440\u043e\u0434 / \u0410\u0434\u0440\u0435\u0441 *
+                Город / Адрес *
                 <input
                   type="text"
                   value={form.city}
@@ -271,7 +271,7 @@ export function CartDrawer({
               </label>
             )}
             <label className="flex flex-col gap-1 text-xs uppercase text-neutral-600">
-              \u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439
+              Комментарий
               <textarea
                 value={form.comment}
                 onChange={(event) => setForm((prev) => ({ ...prev, comment: event.target.value }))}
@@ -282,15 +282,15 @@ export function CartDrawer({
 
           <div className="mt-4 flex flex-col gap-2 border-t border-black/10 pt-4 text-sm">
             <div className="flex justify-between text-neutral-600">
-              <span>\u0421\u0443\u043c\u043c\u0430 \u0442\u043e\u0432\u0430\u0440\u043e\u0432</span>
+              <span>Сумма товаров</span>
               <span>{formatCurrency(totals.subtotal)}</span>
             </div>
             <div className="flex justify-between text-neutral-600">
-              <span>\u0414\u043e\u0441\u0442\u0430\u0432\u043a\u0430</span>
-              <span>0 \u20bd</span>
+              <span>Доставка</span>
+              <span>0 ₽</span>
             </div>
             <div className="flex justify-between border-t border-black/10 pt-2 text-base font-semibold text-black">
-              <span>\u0418\u0442\u043e\u0433\u043e</span>
+              <span>Итого</span>
               <span>{formatCurrency(totals.total)}</span>
             </div>
           </div>
@@ -300,7 +300,7 @@ export function CartDrawer({
             className="mt-4 w-full border border-black bg-black px-4 py-3 text-sm font-semibold uppercase text-white hover:bg-white hover:text-black disabled:bg-neutral-300 disabled:text-neutral-600"
             disabled={isSubmitting}
           >
-            \u041e\u0444\u043e\u0440\u043c\u0438\u0442\u044c \u0437\u0430\u043a\u0430\u0437
+            Оформить заказ
           </button>
         </form>
       </aside>

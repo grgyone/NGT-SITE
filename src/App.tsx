@@ -31,7 +31,7 @@ export default function App() {
         setFetchState({ loading: true, error: null });
         const response = await fetch('/products.json');
         if (!response.ok) {
-          throw new Error('\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c \u043a\u0430\u0442\u0430\u043b\u043e\u0433');
+          throw new Error('Не удалось загрузить каталог');
         }
         const data = (await response.json()) as Product[];
         setProducts(data);
@@ -40,7 +40,7 @@ export default function App() {
         console.error(error);
         setFetchState({
           loading: false,
-          error: '\u041e\u0448\u0438\u0431\u043a\u0430 \u0437\u0430\u0433\u0440\u0443\u0437\u043a\u0438 \u043a\u0430\u0442\u0430\u043b\u043e\u0433\u0430. \u041f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u043e\u0431\u043d\u043e\u0432\u0438\u0442\u044c \u0441\u0442\u0440\u0430\u043d\u0438\u0446\u0443.'
+          error: 'Ошибка загрузки каталога. Попробуйте обновить страницу.'
         });
       }
     };
@@ -108,7 +108,7 @@ export default function App() {
   const handleAddToCart = useCallback(
     (product: Product, quantity: number) => {
       addToCart(product, quantity);
-      setToastMessage(`\u0414\u043e\u0431\u0430\u0432\u043b\u0435\u043d\u043e \u0432 \u043a\u043e\u0440\u0437\u0438\u043d\u0443: ${product.title} - ${quantity} \u0448\u0442.`);
+      setToastMessage(`Добавлено в корзину: ${product.title} - ${quantity} шт.`);
       setIsModalOpen(false);
     },
     [addToCart]
@@ -134,40 +134,40 @@ export default function App() {
     const total = subtotal + deliveryCost;
 
     const lines: string[] = [];
-    lines.push('\u041d\u043e\u0432\u0430\u044f \u0437\u0430\u044f\u0432\u043a\u0430 \u0441 \u0441\u0430\u0439\u0442\u0430 NEW GRGY TIMES');
+    lines.push('Новая заявка с сайта NEW GRGY TIMES');
     lines.push('');
-    lines.push('\u0422\u043e\u0432\u0430\u0440\u044b:');
+    lines.push('Товары:');
     cartItems.forEach((item, index) => {
       const number = index + 1;
       const productTotal = item.product.price * item.quantity;
       lines.push(
-        `${number}. ${item.product.title} - ${item.quantity} \u0448\u0442 x ${formatCurrency(item.product.price)} = ${formatCurrency(productTotal)}`
+        `${number}. ${item.product.title} - ${item.quantity} шт x ${formatCurrency(item.product.price)} = ${formatCurrency(productTotal)}`
       );
     });
     lines.push('');
-    lines.push(`\u0421\u0443\u043c\u043c\u0430 \u0442\u043e\u0432\u0430\u0440\u043e\u0432: ${formatCurrency(subtotal)}`);
-    lines.push(`\u0414\u043e\u0441\u0442\u0430\u0432\u043a\u0430: ${formatCurrency(deliveryCost)}`);
-    lines.push(`\u0418\u0442\u043e\u0433\u043e: ${formatCurrency(total)}`);
+    lines.push(`Сумма товаров: ${formatCurrency(subtotal)}`);
+    lines.push(`Доставка: ${formatCurrency(deliveryCost)}`);
+    lines.push(`Итого: ${formatCurrency(total)}`);
     lines.push('');
-    lines.push('\u0414\u0430\u043d\u043d\u044b\u0435 \u043f\u043e\u043a\u0443\u043f\u0430\u0442\u0435\u043b\u044f:');
-    lines.push(`\u0418\u043c\u044f: ${form.name}`);
-    lines.push(`\u0422\u0435\u043b\u0435\u0444\u043e\u043d: ${form.phone}`);
+    lines.push('Данные покупателя:');
+    lines.push(`Имя: ${form.name}`);
+    lines.push(`Телефон: ${form.phone}`);
     lines.push(
-      `\u0421\u043f\u043e\u0441\u043e\u0431 \u0434\u043e\u0441\u0442\u0430\u0432\u043a\u0438: ${form.delivery === 'pickup' ? '\u041f\u0412\u0417' : '\u041a\u0443\u0440\u044c\u0435\u0440'}`
+      `Способ доставки: ${form.delivery === 'pickup' ? 'ПВЗ' : 'Курьер'}`
     );
     if (form.delivery === 'courier') {
-      lines.push(`\u0413\u043e\u0440\u043e\u0434 / \u0410\u0434\u0440\u0435\u0441: ${form.city || '\u041d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d'}`);
+      lines.push(`Город / Адрес: ${form.city || 'Не указан'}`);
     }
     if (form.comment.trim()) {
-      lines.push(`\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439: ${form.comment.trim()}`);
+      lines.push(`Комментарий: ${form.comment.trim()}`);
     }
 
     const text = lines.join('\n');
     const copied = await copyToClipboard(text);
     if (copied) {
-      setToastMessage('\u0417\u0430\u044f\u0432\u043a\u0430 \u0441\u043a\u043e\u043f\u0438\u0440\u043e\u0432\u0430\u043d\u0430, \u043e\u0442\u043a\u0440\u043e\u0439\u0442\u0435 Telegram \u0434\u043b\u044f \u043e\u0442\u043f\u0440\u0430\u0432\u043a\u0438');
+      setToastMessage('Заявка скопирована, откройте Telegram для отправки');
     } else {
-      setToastMessage('\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0441\u043a\u043e\u043f\u0438\u0440\u043e\u0432\u0430\u0442\u044c \u0437\u0430\u044f\u0432\u043a\u0443. \u0421\u043a\u043e\u043f\u0438\u0440\u0443\u0439\u0442\u0435 \u0432\u0440\u0443\u0447\u043d\u0443\u044e.');
+      setToastMessage('Не удалось скопировать заявку. Скопируйте вручную.');
     }
     window.open('https://t.me/grgyone', '_blank', 'noopener,noreferrer');
   };
@@ -198,7 +198,7 @@ export default function App() {
           <button
             type="button"
             className="relative flex h-10 w-10 items-center justify-center text-black"
-            aria-label="\u041e\u0442\u043a\u0440\u044b\u0442\u044c \u043a\u043e\u0440\u0437\u0438\u043d\u0443"
+            aria-label="Открыть корзину"
             onClick={() => setIsCartOpen(true)}
           >
             <svg
@@ -226,7 +226,7 @@ export default function App() {
 
       <main>
         {fetchState.loading && (
-          <div className="flex justify-center px-4 py-12 text-sm text-neutral-600">\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430...</div>
+          <div className="flex justify-center px-4 py-12 text-sm text-neutral-600">Загрузка...</div>
         )}
         {fetchState.error && (
           <div className="flex justify-center px-4 py-12 text-sm text-red-600">{fetchState.error}</div>
@@ -259,7 +259,7 @@ export default function App() {
               Support
             </a>
           </div>
-          <div className="text-xs text-neutral-500">\u00a9 2025 Aim\u00e9 Leon Dore EU</div>
+          <div className="text-xs text-neutral-500">© 2025 NEW GRGY TIMES</div>
         </div>
       </footer>
 

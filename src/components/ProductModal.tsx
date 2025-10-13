@@ -96,7 +96,7 @@ export function ProductModal({ product, isOpen, onClose, onAddToCart }: ProductM
                   imageSources.length > 0 ? (prev - 1 + imageSources.length) % imageSources.length : prev
                 )
               }
-              aria-label="\u041f\u0440\u0435\u0434\u044b\u0434\u0443\u0449\u0435\u0435 \u0438\u0437\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u0435"
+              aria-label="Предыдущее изображение"
             >
               &lt;
             </button>
@@ -117,7 +117,7 @@ export function ProductModal({ product, isOpen, onClose, onAddToCart }: ProductM
                   imageSources.length > 0 ? (prev + 1) % imageSources.length : prev
                 )
               }
-              aria-label="\u0421\u043b\u0435\u0434\u0443\u044e\u0449\u0435\u0435 \u0438\u0437\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u0435"
+              aria-label="Следующее изображение"
             >
               &gt;
             </button>
@@ -132,7 +132,7 @@ export function ProductModal({ product, isOpen, onClose, onAddToCart }: ProductM
               >
                 <img
                   src={src}
-                  alt={`${product.title} \u043f\u0440\u0435\u0432\u044c\u044e ${index + 1}`}
+                  alt={`${product.title} превью ${index + 1}`}
                   className="h-16 w-full object-cover"
                   onError={(event) => {
                     const target = event.currentTarget;
@@ -151,23 +151,23 @@ export function ProductModal({ product, isOpen, onClose, onAddToCart }: ProductM
               <span className="text-lg font-semibold">
                 {formatCurrency(product.price, product.currency)} / {product.unit}
               </span>
-              <span className="text-sm text-neutral-600">\u0412 \u043d\u0430\u043b\u0438\u0447\u0438\u0438: {product.stock}</span>
+              <span className="text-sm text-neutral-600">В наличии: {product.stock}</span>
             </div>
           </div>
 
           {product.description && <p className="text-sm leading-relaxed text-neutral-700">{product.description}</p>}
 
           <div className="flex flex-col gap-1 text-sm text-neutral-700">
-            {product.materials && <div>\u041c\u0430\u0442\u0435\u0440\u0438\u0430\u043b\u044b: {product.materials}</div>}
+            {product.materials && <div>Материалы: {product.materials}</div>}
             {product.dimensions && (
               <div>
-                \u0420\u0430\u0437\u043c\u0435\u0440\u044b: {product.dimensions.w_cm} x {product.dimensions.h_cm}
-                {product.dimensions.d_cm ? ` x ${product.dimensions.d_cm}` : ''} \u0441\u043c
+                Размеры: {product.dimensions.w_cm} x {product.dimensions.h_cm}
+                {product.dimensions.d_cm ? ` x ${product.dimensions.d_cm}` : ''} см
               </div>
             )}
             {product.edition && (
               <div>
-                \u0422\u0438\u0440\u0430\u0436 / COA: {product.edition.current} / {product.edition.of}
+                Тираж / COA: {product.edition.current} / {product.edition.of}
               </div>
             )}
             {product.specs && (
@@ -183,14 +183,14 @@ export function ProductModal({ product, isOpen, onClose, onAddToCart }: ProductM
           </div>
 
           <div className="flex items-center gap-3 border-t border-black/10 pt-4">
-            <span className="text-sm uppercase text-neutral-600">\u041a\u043e\u043b\u0438\u0447\u0435\u0441\u0442\u0432\u043e</span>
+            <span className="text-sm uppercase text-neutral-600">Количество</span>
             <div className="flex items-center border border-black/40">
               <button
                 type="button"
                 className="px-3 py-2 text-sm text-black hover:bg-black hover:text-white disabled:bg-neutral-200 disabled:text-neutral-500"
                 onClick={() => setQuantity((prev) => Math.max(1, prev - 1))}
                 disabled={disableDecrease}
-                aria-label="\u0423\u043c\u0435\u043d\u044c\u0448\u0438\u0442\u044c \u043a\u043e\u043b\u0438\u0447\u0435\u0441\u0442\u0432\u043e"
+                aria-label="Уменьшить количество"
               >
                 -
               </button>
@@ -212,7 +212,7 @@ export function ProductModal({ product, isOpen, onClose, onAddToCart }: ProductM
                 className="px-3 py-2 text-sm text-black hover:bg-black hover:text-white disabled:bg-neutral-200 disabled:text-neutral-500"
                 onClick={() => setQuantity((prev) => Math.min(product.stock, prev + 1))}
                 disabled={disableIncrease}
-                aria-label="\u0423\u0432\u0435\u043b\u0438\u0447\u0438\u0442\u044c \u043a\u043e\u043b\u0438\u0447\u0435\u0441\u0442\u0432\u043e"
+                aria-label="Увеличить количество"
               >
                 +
               </button>
@@ -225,14 +225,14 @@ export function ProductModal({ product, isOpen, onClose, onAddToCart }: ProductM
               className="w-full border border-black bg-black px-4 py-3 text-center text-sm font-semibold uppercase text-white hover:bg-white hover:text-black"
               onClick={handleAdd}
             >
-              \u0412 \u043a\u043e\u0440\u0437\u0438\u043d\u0443
+              В корзину
             </button>
             <button
               type="button"
               className="w-full border border-black px-4 py-3 text-center text-sm font-semibold uppercase text-black hover:bg-black hover:text-white"
               onClick={onClose}
             >
-              \u0417\u0430\u043a\u0440\u044b\u0442\u044c
+              Закрыть
             </button>
           </div>
         </div>

@@ -33,7 +33,7 @@ export function ProductCard({ product, onSelect }: ProductCardProps) {
         type="button"
         onClick={onSelect}
         className="relative aspect-square w-full overflow-hidden border border-black/10 bg-white"
-        aria-label={`\u041f\u043e\u0434\u0440\u043e\u0431\u043d\u0435\u0435 \u043e \u0442\u043e\u0432\u0430\u0440\u0435 ${product.title}`}
+        aria-label={`Подробнее о товаре ${product.title}`}
       >
         <img
           src={imageSrc}
