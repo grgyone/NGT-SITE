@@ -26,6 +26,10 @@ body {
   background-color: var(--color-background);
 }
 
+body.modal-open {
+  overflow: hidden;
+}
+
 a {
   color: inherit;
   text-decoration: none;
@@ -79,7 +83,7 @@ a {
   background: none;
   border: none;
   color: inherit;
-  cursor: default;
+  cursor: pointer;
   font-size: 16px;
   padding: 4px 0;
 }
@@ -126,6 +130,7 @@ a {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  cursor: pointer;
 }
 
 .product-image-wrapper {
@@ -184,4 +189,97 @@ a {
   margin: 0;
   font-size: 13px;
   color: var(--color-text-muted);
+}
+
+.cart-popup.hidden {
+  display: none;
+}
+
+.cart-popup {
+  position: absolute;
+  top: 60px;
+  right: 16px;
+  background: #ffffff;
+  border: 1px solid #dddddd;
+  padding: 16px;
+  font-size: 14px;
+  min-width: 200px;
+  z-index: 100;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  opacity: 0;
+  transform: translateY(-8px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  pointer-events: none;
+}
+
+.cart-popup.active {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.modal.hidden {
+  display: none;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: #ffffff;
+  padding: 24px;
+  max-width: 400px;
+  width: 90%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.modal-image {
+  width: 100%;
+  height: auto;
+}
+
+.modal-title {
+  margin: 0;
+  font-size: 20px;
+}
+
+.modal-description {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 15px;
+}
+
+.modal-price {
+  margin: 0;
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.modal-content button {
+  margin-top: 16px;
+  width: 100%;
+  padding: 8px;
+  background: #000000;
+  color: #ffffff;
+  border: none;
+  cursor: pointer;
+  font-size: 15px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.modal-close {
+  background: transparent;
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
 }

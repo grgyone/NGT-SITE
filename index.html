@@ -22,6 +22,9 @@
       </button>
     </div>
   </header>
+  <div id="cart-popup" class="cart-popup hidden">
+    <p>Корзина пуста</p>
+  </div>
   <main class="container">
     <section id="grid" class="product-grid" aria-label="Список товаров"></section>
   </main>
@@ -35,6 +38,16 @@
       <p class="footer-copy">&copy; 2024 NEW GRGY TIMES. Все права защищены.</p>
     </div>
   </footer>
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-content">
+      <img src="./0.png" alt="" class="modal-image">
+      <h2 id="modal-title" class="modal-title"></h2>
+      <p class="modal-description"></p>
+      <p class="modal-price"></p>
+      <button type="button" class="modal-add">Добавить в корзину</button>
+      <button type="button" class="modal-close">Закрыть</button>
+    </div>
+  </div>
   <script src="./app.js"></script>
 </body>
 </html>
