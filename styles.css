@@ -303,6 +303,11 @@ a {
   font-size: 13px;
 }
 
+.cart-actions button[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .cart-actions button.secondary {
   background: #ffffff;
   color: #000000;
@@ -351,6 +356,7 @@ a {
 
 .cart-form input[type="text"],
 .cart-form input[type="tel"],
+.cart-form input[type="email"],
 .cart-form textarea {
   border: 1px solid #dddddd;
   padding: 8px;
@@ -358,33 +364,35 @@ a {
   width: 100%;
 }
 
+.cart-form input::placeholder,
+.cart-form textarea::placeholder {
+  color: #999999;
+}
+
 .cart-form textarea {
   resize: vertical;
 }
 
-.cart-form .radios {
-  display: flex;
-  gap: 16px;
-  align-items: center;
-}
-
-#deliveryNoteCommon,
-#deliveryNotePvz {
-  display: block;
-}
-
-.delivery-note {
+.delivery-info {
   font-size: 12px;
   color: #555555;
-  margin-top: 4px;
+  background: #f7f7f7;
+  border: 1px solid #eeeeee;
+  padding: 8px;
+  margin-top: 8px;
 }
 
-.delivery-note.subtle {
-  color: #777777;
+.consent-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 13px;
 }
 
-#addressRow {
-  display: none;
+.consent-row a {
+  color: #000000;
+  text-decoration: underline;
 }
 
 .input-error {
