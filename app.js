@@ -37,6 +37,7 @@ document.addEventListener('DOMContentLoaded', () => {
     name: '',
     email: '',
     telegram: '',
+    comment: '',
     consent: false,
   };
 
@@ -191,6 +192,7 @@ document.addEventListener('DOMContentLoaded', () => {
       name: form.querySelector('#custName')?.value ?? cartFormState.name,
       email: form.querySelector('#custEmail')?.value ?? cartFormState.email,
       telegram: form.querySelector('#custTelegram')?.value ?? cartFormState.telegram,
+      comment: form.querySelector('#custComment')?.value ?? cartFormState.comment,
       consent: !!form.querySelector('#privacyConsent')?.checked,
     };
   }
@@ -380,6 +382,10 @@ document.addEventListener('DOMContentLoaded', () => {
           <label for="custTelegram">Telegram <span class="field-hint">(необязательно — заполните, если предпочитаете связь в Telegram)</span></label>
           <input type="text" id="custTelegram" placeholder="username (автодобавим @)" value="${escapeHtml(cartFormState.telegram)}">
         </div>
+        <div class="row">
+          <label for="custComment">Комментарий к заказу (необязательно)</label>
+          <textarea id="custComment" placeholder="До 200 символов" maxlength="200" rows="3">${escapeHtml(cartFormState.comment)}</textarea>
+        </div>
         <div class="delivery-info">
           Доставка за счёт покупателя, детали доставки обсуждаются после подтверждения заказа.
         </div>
@@ -407,6 +413,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const nameInput = cartPopup.querySelector('#custName');
     const emailInput = cartPopup.querySelector('#custEmail');
     const telegramInput = cartPopup.querySelector('#custTelegram');
+    const commentInput = cartPopup.querySelector('#custComment');
     const consentInput = cartPopup.querySelector('#privacyConsent');
     const orderBtn = cartPopup.querySelector('#orderBtn');
 
@@ -433,9 +440,10 @@ document.addEventListener('DOMContentLoaded', () => {
       cartFormState = {
         name: nameInput.value ?? '',
         email: emailInput.value ?? '',
-      telegram: telegramInput?.value ?? '',
-      consent: !!consentInput?.checked,
-    };
+        telegram: telegramInput?.value ?? '',
+        comment: commentInput?.value ?? '',
+        consent: !!consentInput?.checked,
+      };
     };
 
     const updateSubmitState = () => {
@@ -463,6 +471,11 @@ document.addEventListener('DOMContentLoaded', () => {
       });
       ensureTelegramPrefix();
     }
+
+    commentInput?.addEventListener('input', () => {
+      updateFormState();
+      updateSubmitState();
+    });
 
     [nameInput, emailInput].forEach((input) => {
       input.addEventListener('input', () => {
@@ -584,11 +597,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const nameInput = document.getElementById('custName');
     const emailInput = document.getElementById('custEmail');
     const telegramInput = document.getElementById('custTelegram');
+    const commentInput = document.getElementById('custComment');
     const consentInput = document.getElementById('privacyConsent');
 
     const name = (nameInput?.value || '').trim();
     const email = (emailInput?.value || '').trim();
     let telegram = (telegramInput?.value || '').trim();
+    const comment = (commentInput?.value || '').trim();
     if (telegram === '@') {
       telegram = '';
     }
@@ -597,6 +612,7 @@ document.addEventListener('DOMContentLoaded', () => {
       name,
       email,
       telegram,
+      comment,
       consent: !!consentInput?.checked,
     };
 
@@ -615,6 +631,9 @@ document.addEventListener('DOMContentLoaded', () => {
     lines.push(`Имя: ${name}`);
     lines.push(`Email: ${email}`);
     lines.push(`Telegram: ${telegram || '-'}`);
+    if (comment) {
+      lines.push(`Комментарий: ${comment}`);
+    }
 
     const formData = new FormData();
     formData.append('access_key', WEB3FORMS_ACCESS_KEY);
@@ -634,6 +653,18 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = await response.json();
       if (data.success) {
         showToast('Заявка отправлена');
+
+        // Очистка корзины
+        saveCart([]);
+        cart = [];
+        updateCartCount();
+        renderCart();
+
+        // Очистка формы (если она видна)
+        const form = document.getElementById('cartForm');
+        if (form) form.reset();
+
+        return;
       } else {
         showToast('Не удалось отправить заявку, попробуйте позже');
         console.error('Web3Forms error:', data);

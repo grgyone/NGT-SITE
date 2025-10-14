@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy — NEW GRGY TIMES</title>
+  <link rel="icon" href="./favicon.ico">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="./index.html">
+        <img src="./logo.png" alt="NEW GRGY TIMES" class="brand-logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';">
+        <span class="brand-text">NEW GRGY TIMES</span>
+      </a>
+      <button class="cart-icon" type="button" aria-label="Корзина">
+        <img src="./bag.png" alt="Cart" class="cart-icon-img">
+        <span id="cart-count" class="cart-count hidden">0</span>
+      </button>
+    </div>
+  </header>
+
+  <div id="cart-popup" class="cart-popup hidden">
+    <p>Корзина пуста</p>
+  </div>
+
+  <main class="container page-content">
+    <h1>Privacy Policy</h1>
+
+    <section class="section-block">
+      <h2>Оператор и контактные данные</h2>
+      <p>Владельцем и оператором сайта является NEW GRGY TIMES, принадлежащий Георгию Суханову. По всем вопросам защиты данных можно написать на <a href="mailto:grgyone@gmail.com">grgyone@gmail.com</a>.</p>
+    </section>
+
+    <section class="section-block">
+      <h2>Применимое право</h2>
+      <p>Обработка персональных данных осуществляется в соответствии с законодательством Российской Федерации, включая закон «О персональных данных».</p>
+    </section>
+
+    <section class="section-block">
+      <h2>Какие данные мы получаем</h2>
+      <p>При оформлении заказа пользователь передает Имя (обязательное поле), Email (обязательное поле), Telegram (необязательное поле) и содержимое корзины. В иных случаях сайт данные не собирает.</p>
+    </section>
+
+    <section class="section-block">
+      <h2>Способ отправки форм</h2>
+      <p>Все формы отправляются через сервис Web3Forms, который выступает процессором данных и обрабатывает заявки от имени NEW GRGY TIMES.</p>
+    </section>
+
+    <section class="section-block">
+      <h2>Платежи и доставка</h2>
+      <p>Оплата на сайте отсутствует: подтверждение заказа и дальнейшая переписка ведутся вручную. Доставка осуществляется только по предварительной договоренности, а данные для доставки уточняются после подтверждения заказа.</p>
+    </section>
+
+    <section class="section-block">
+      <h2>Куки и аналитика</h2>
+      <p>Аналитические сервисы не используются. Возможны лишь минимальные технические куки, необходимые для корректной работы интерфейса сайта.</p>
+    </section>
+
+    <section class="section-block">
+      <h2>Хранение данных</h2>
+      <p>Заявки могут храниться в почтовом ящике владельца и у процессора Web3Forms до 24 месяцев. Пользователь вправе запросить удаление своих данных в любой момент.</p>
+    </section>
+
+    <section class="section-block">
+      <h2>Права пользователей</h2>
+      <p>Вы имеете право на доступ, исправление и удаление персональных данных. Для реализации этих прав свяжитесь с нами по адресу <a href="mailto:grgyone@gmail.com">grgyone@gmail.com</a>.</p>
+    </section>
+
+    <section class="section-block">
+      <h2>Передача третьим лицам</h2>
+      <p>Персональные данные могут быть переданы только Web3Forms (как процессору форм) и сервисам доставки после подтверждения заказа и строго в объеме, необходимом для исполнения обязательств. Хостинг сайта предоставляется платформой GitHub Pages.</p>
+    </section>
+
+    <section class="section-block">
+      <h2>Дети</h2>
+      <p>Сайт не предназначен для лиц младше 18 лет, и заявки от несовершеннолетних не принимаются.</p>
+    </section>
+
+    <section class="section-block">
+      <h2>Безопасность</h2>
+      <p>Мы применяем разумные технические и организационные меры (включая использование HTTPS и ограниченный доступ к почте) для защиты заявок от несанкционированного доступа.</p>
+    </section>
+
+    <section class="section-block">
+      <h2>Обновление политики</h2>
+      <p>Политика конфиденциальности может обновляться. Дата последнего изменения указывается ниже. Продолжая использовать сайт, вы соглашаетесь с актуальной версией документа.</p>
+    </section>
+
+    <p><strong>Дата обновления: 14 октября 2025</strong></p>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-links">
+      <a href="./index.html">Home</a>
+      <a href="./about.html">About</a>
+      <a href="./contacts.html">Contacts</a>
+      <a id="footer-privacy" href="./privacy.html">Privacy Policy</a>
+      <a href="#">Terms of Service</a>
+      <a href="#">Return &amp; Refund Policy</a>
+      <a href="#">Support</a>
+    </div>
+    <div class="container copyright">&copy; 2025 NEW GRGY TIMES</div>
+  </footer>
+
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-content">
+      <img src="./0.png" alt="" class="modal-image">
+      <h2 id="modal-title" class="modal-title"></h2>
+      <p class="modal-description"></p>
+      <p class="modal-price"></p>
+      <div class="qty-row">
+        <button type="button" class="qty-btn" data-action="dec" aria-label="Уменьшить количество товара">−</button>
+        <input type="number" class="qty-input" value="1" min="1" aria-label="Количество товара">
+        <button type="button" class="qty-btn" data-action="inc" aria-label="Увеличить количество товара">+</button>
+      </div>
+      <button type="button" class="modal-add">Добавить в корзину</button>
+      <button type="button" class="modal-close">Закрыть</button>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="./app.js"></script>
+</body>
+</html>
