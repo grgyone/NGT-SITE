@@ -1,0 +1,31 @@
+{
+  "items": [
+    {
+      "id": "untitled-1",
+      "title": "untitled",
+      "sku": "UNT-001",
+      "price": 1000,
+      "stock": 10,
+      "description": "untitled",
+      "images": ["./0.png"]
+    },
+    {
+      "id": "untitled-2",
+      "title": "untitled",
+      "sku": "UNT-002",
+      "price": 1000,
+      "stock": 10,
+      "description": "untitled",
+      "images": ["./0.png"]
+    },
+    {
+      "id": "untitled-3",
+      "title": "untitled",
+      "sku": "UNT-003",
+      "price": 1000,
+      "stock": 10,
+      "description": "untitled",
+      "images": ["./0.png"]
+    }
+  ]
+}
