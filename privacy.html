@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -6,6 +7,96 @@
   <title>Privacy Policy — NEW GRGY TIMES</title>
   <link rel="icon" href="./favicon.ico">
   <link rel="stylesheet" href="./styles.css">
+
+  <!-- Compact legal layout for privacy.html only -->
+  <style>
+    /* Колонка и внутренние отступы только для этой страницы */
+    main.container.page-content {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 2px 2px;
+    }
+
+    /* Заголовки — компактнее и чище */
+    .page-content h1 {
+      font-size: 28px;
+      line-height: 1.2;
+      letter-spacing: .02em;
+      margin: 8px 0 14px;
+    }
+    .page-content h2 {
+      font-size: 16px;
+      line-height: 1.25;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      margin: 20px 0 8px;
+    }
+    .page-content h3 {
+      font-size: 14px;
+      line-height: 1.25;
+      margin: 16px 0 6px;
+    }
+
+    /* Плотный текст и списки для юридической страницы */
+    .page-content p,
+    .page-content li {
+      font-size: 14px;
+      line-height: 1.5;
+      margin: 6px 0;
+    }
+    .page-content ul,
+    .page-content ol {
+      padding-left: 18px;
+      margin: 8px 0 12px;
+    }
+    .page-content li + li {
+      margin-top: 2px;
+    }
+
+    /* Разделители (если появятся) */
+    .page-content hr {
+      border: 0;
+      border-top: 1px solid rgba(0,0,0,.08);
+      margin: 16px 0;
+    }
+
+    /* Ссылки — аккуратное подчеркивание */
+    .page-content a {
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    /* Нумерация h2 через CSS-счетчик без изменения HTML */
+    .page-content {
+      counter-reset: section;
+    }
+    .page-content h2::before {
+      counter-increment: section;
+      content: counter(section, decimal-leading-zero) ". ";
+      opacity: .45;
+      margin-right: 4px;
+    }
+
+    /* Уплотнение секций */
+    .page-content .section-block {
+      margin: 8px 0 10px;
+    }
+
+    /* Мелкий текст */
+    .page-content small {
+      font-size: 12px;
+      opacity: .75;
+    }
+
+    /* Адаптив для очень узких экранов */
+    @media (max-width: 480px) {
+      .page-content h1 { font-size: 24px; }
+      .page-content h2 { font-size: 15px; letter-spacing: .05em; }
+      .page-content p,
+      .page-content li { font-size: 13.5px; }
+      main.container.page-content { padding: 20px 14px; }
+    }
+  </style>
 </head>
 <body>
   <header class="site-header">
@@ -124,3 +215,4 @@
   <script src="./app.js"></script>
 </body>
 </html>
+```
