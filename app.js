@@ -1,3 +1,302 @@
+/***** INVENTORY: remote shared store for static site *****/
+const INVENTORY_CFG = {
+  BASE: 'https://api.jsonbin.io/v3/b',
+  BIN_ID: '66efb0d7acd3cb34a89b5c5c',
+  API_KEY: 'AZwK0+dummykeyexample1234567890=',
+};
+
+const Inventory = (() => {
+  let cache = null;
+  let loading = null;
+
+  const headers = {
+    'Content-Type': 'application/json',
+    'X-Master-Key': INVENTORY_CFG.API_KEY,
+  };
+
+  async function loadRemote() {
+    const res = await fetch(`${INVENTORY_CFG.BASE}/${INVENTORY_CFG.BIN_ID}/latest`, {
+      headers,
+      cache: 'no-store',
+    });
+    if (!res.ok) throw new Error('Inventory load failed');
+    const data = await res.json();
+    return data.record || data;
+  }
+
+  async function saveRemote(next) {
+    const res = await fetch(`${INVENTORY_CFG.BASE}/${INVENTORY_CFG.BIN_ID}`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify(next),
+    });
+    if (!res.ok) throw new Error('Inventory save failed');
+    const data = await res.json();
+    return data.record || next;
+  }
+
+  async function ensure() {
+    if (cache) return cache;
+    if (!loading)
+      loading = loadRemote()
+        .then((d) => (cache = d))
+        .finally(() => (loading = null));
+    return loading;
+  }
+
+  function getLocal() {
+    try {
+      return JSON.parse(localStorage.getItem('inventory_fallback')) || null;
+    } catch {
+      return null;
+    }
+  }
+  function setLocal(obj) {
+    try {
+      localStorage.setItem('inventory_fallback', JSON.stringify(obj));
+    } catch {}
+  }
+
+  async function getAll() {
+    try {
+      const data = await ensure();
+      if (!data.inventory) data.inventory = {};
+      setLocal(data);
+      return structuredClone(data.inventory);
+    } catch {
+      const fb = getLocal() || { inventory: {} };
+      return structuredClone(fb.inventory || {});
+    }
+  }
+
+  async function get(itemId) {
+    const inv = await getAll();
+    return Number(inv[itemId] ?? 0);
+  }
+
+  async function reserve(itemId, qty) {
+    const data = await ensure().catch(() => null);
+    let state = data || getLocal() || { inventory: {} };
+    if (!state.inventory) state.inventory = {};
+    const current = Number(state.inventory[itemId] ?? 0);
+    if (current < qty) return { ok: false, left: current };
+
+    state.inventory[itemId] = current - qty;
+
+    try {
+      const saved = await saveRemote(state);
+      cache = saved;
+      setLocal(saved);
+      return { ok: true, left: Number(saved.inventory[itemId] ?? 0) };
+    } catch {
+      return { ok: false, left: current };
+    }
+  }
+
+  async function reserveMany(cartMap) {
+    const data = await ensure().catch(() => null);
+    let state = data || getLocal() || { inventory: {} };
+    if (!state.inventory) state.inventory = {};
+
+    for (const [id, q] of Object.entries(cartMap)) {
+      const current = Number(state.inventory[id] ?? 0);
+      if (current < q) return { ok: false, insufficient: { id, need: q, have: current } };
+    }
+    for (const [id, q] of Object.entries(cartMap)) {
+      state.inventory[id] = Number(state.inventory[id] ?? 0) - q;
+    }
+
+    try {
+      const saved = await saveRemote(state);
+      cache = saved;
+      setLocal(saved);
+      return { ok: true, left: saved.inventory };
+    } catch {
+      return { ok: false, error: 'save_failed' };
+    }
+  }
+
+  return { getAll, get, reserve, reserveMany };
+})();
+
+const INVENTORY_LEGACY_KEY = 'inventory';
+
+function loadInitialInventoryCache() {
+  const result = {};
+  try {
+    const raw = localStorage.getItem('inventory_fallback');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && parsed.inventory && typeof parsed.inventory === 'object') {
+        Object.assign(result, parsed.inventory);
+      }
+    }
+  } catch {}
+  if (!Object.keys(result).length) {
+    try {
+      const legacy = JSON.parse(localStorage.getItem(INVENTORY_LEGACY_KEY) || '{}');
+      if (legacy && typeof legacy === 'object' && !Array.isArray(legacy)) {
+        Object.assign(result, legacy);
+      }
+    } catch {}
+  }
+  return result;
+}
+
+let inventoryCache = loadInitialInventoryCache();
+
+function setInventoryCache(next) {
+  const normalized = {};
+  Object.entries(next || {}).forEach(([key, value]) => {
+    if (!key) return;
+    const safeKey = String(key);
+    const numeric = Number(value);
+    normalized[safeKey] = Number.isFinite(numeric) ? Math.max(0, numeric) : 0;
+  });
+  inventoryCache = normalized;
+  try {
+    localStorage.setItem(INVENTORY_LEGACY_KEY, JSON.stringify(inventoryCache));
+  } catch {}
+  try {
+    localStorage.setItem('inventory_fallback', JSON.stringify({ inventory: inventoryCache }));
+  } catch {}
+}
+
+function applyInventorySnapshot(source) {
+  const stock = source || inventoryCache;
+  document.querySelectorAll('[data-item-id]').forEach((card) => {
+    const id = card.getAttribute('data-item-id');
+    const left = Number(stock[id] ?? 0);
+
+    const addBtns = card.querySelectorAll('.add-to-cart, .card-add, .modal-add');
+    addBtns.forEach((btn) => {
+      if (!btn) return;
+      btn.disabled = left <= 0;
+      btn.setAttribute('aria-disabled', left <= 0 ? 'true' : 'false');
+      if (left <= 0) btn.dataset._originalText ??= btn.textContent;
+      if (left <= 0) btn.textContent = 'Нет в наличии';
+      if (left > 0 && btn.dataset._originalText) btn.textContent = btn.dataset._originalText;
+    });
+
+    const badge = card.querySelector('.stock-badge');
+    if (badge) badge.textContent = left > 0 ? `В наличии: ${left}` : 'Нет в наличии';
+  });
+}
+
+function reserveInventoryLocally(cartMap) {
+  const draft = { ...inventoryCache };
+  for (const [id, qty] of Object.entries(cartMap || {})) {
+    const current = Number(draft[id] ?? 0);
+    const needed = Number(qty) || 0;
+    if (current < needed) {
+      return { ok: false, insufficient: { id, need: needed, have: current } };
+    }
+  }
+  for (const [id, qty] of Object.entries(cartMap || {})) {
+    const current = Number(draft[id] ?? 0);
+    const needed = Number(qty) || 0;
+    draft[id] = Math.max(0, current - needed);
+  }
+  setInventoryCache(draft);
+  return { ok: true, left: draft };
+}
+
+async function refreshInventoryUI() {
+  try {
+    const stock = await Inventory.getAll();
+    setInventoryCache(stock);
+    applyInventorySnapshot(stock);
+  } catch {
+    // Без сети — тихо игнорируем, UI останется как есть
+    applyInventorySnapshot();
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  refreshInventoryUI();
+});
+
+async function refreshModalStock(itemId) {
+  const left = await Inventory.get(itemId);
+  const modal = document.getElementById('modal');
+  const qtyInput = modal?.querySelector('.qty-input');
+  const addBtn = modal?.querySelector('.modal-add');
+
+  if (qtyInput) {
+    qtyInput.max = Math.max(0, left);
+    if (Number(qtyInput.value) > left) qtyInput.value = Math.max(1, left);
+  }
+  if (addBtn) {
+    addBtn.disabled = left <= 0;
+    addBtn.textContent = left > 0 ? 'Добавить в корзину' : 'Нет в наличии';
+  }
+}
+window.refreshModalStock = refreshModalStock;
+
+async function handleCheckout(cartItems, options = {}) {
+  const cartMap = {};
+  (cartItems || []).forEach((it) => {
+    const id = String(it.id);
+    const q = Number(it.qty || 1);
+    cartMap[id] = (cartMap[id] || 0) + q;
+  });
+
+  let inventoryAfterReserve = null;
+  const res = await Inventory.reserveMany(cartMap);
+  if (!res.ok) {
+    if (res.insufficient) {
+      const { id, need, have } = res.insufficient;
+      showToast(`Недостаточно товара: ${id}. Нужно ${need}, осталось ${have}.`);
+      return false;
+    }
+    if (res.error === 'save_failed') {
+      const fallback = reserveInventoryLocally(cartMap);
+      if (!fallback.ok) {
+        const { id, need, have } = fallback.insufficient || {};
+        if (id) {
+          showToast(`Недостаточно товара: ${id}. Нужно ${need}, осталось ${have}.`);
+        } else {
+          showToast('Не удалось подтвердить наличие. Попробуйте ещё раз.');
+        }
+        return false;
+      }
+      inventoryAfterReserve = fallback.left;
+    } else {
+      showToast('Не удалось подтвердить наличие. Попробуйте ещё раз.');
+      return false;
+    }
+  } else {
+    inventoryAfterReserve = res.left;
+  }
+
+  if (inventoryAfterReserve) {
+    setInventoryCache(inventoryAfterReserve);
+    refreshInventoryUI();
+  }
+
+  try {
+    if (typeof options.onSubmit === 'function') {
+      await options.onSubmit(inventoryAfterReserve);
+    } else {
+      showToast('Заказ оформлен. Спасибо!');
+    }
+    return true;
+  } catch (e) {
+    console.error('[checkout] submit error', e);
+    if (typeof options.onError === 'function') {
+      options.onError(e);
+    } else {
+      showToast('Ошибка отправки заказа. Попробуйте позже.');
+    }
+    return false;
+  } finally {
+    if (typeof options.onFinally === 'function') {
+      options.onFinally();
+    }
+  }
+}
+window.handleCheckout = handleCheckout;
+
 const WEB3FORMS_ACCESS_KEY = '97052283-3d2d-46b2-86ca-c21f81998914';
 const CART_STORAGE_KEY = 'cart';
 const CART_TRANSITION_MS = 200;
@@ -46,8 +345,9 @@ function getModalOverlay(modalEl) {
 document.addEventListener('DOMContentLoaded', async () => {
   try {
     await loadCatalog();
-    ensureInventoryFromCatalog(products);
+    await ensureInventoryFromCatalog(products);
     renderGrid(products);
+    await refreshInventoryUI();
     console.log('[init] grid rendered', products.length, 'items');
   } catch (error) {
     console.error('[init] catalog error:', error);
@@ -132,50 +432,39 @@ function normalizeProduct(raw) {
   };
 }
 
-function ensureInventoryFromCatalog(items) {
-  const raw = localStorage.getItem('inventory');
-  let inv;
+async function ensureInventoryFromCatalog(items) {
   try {
-    inv = raw ? JSON.parse(raw) : {};
-  } catch {
-    inv = {};
-  }
-  let changed = false;
-  (items || []).forEach((product) => {
-    if (!product || product.id == null) {
-      return;
-    }
-    if (inv[product.id] == null) {
-      inv[product.id] = Number.isFinite(product.stock) ? product.stock : 0;
-      changed = true;
-    }
-  });
-  if (changed) {
-    localStorage.setItem('inventory', JSON.stringify(inv));
-    console.log('[inventory] initialized from catalog');
-  } else {
-    console.log('[inventory] already present');
+    const stock = await Inventory.getAll();
+    setInventoryCache(stock);
+    console.log('[inventory] synced from remote,', Object.keys(stock || {}).length, 'entries');
+  } catch (error) {
+    console.warn('[inventory] remote sync failed, using catalog defaults', error);
+    const fallback = {};
+    (items || []).forEach((product) => {
+      if (!product || product.id == null) {
+        return;
+      }
+      if (fallback[product.id] == null) {
+        fallback[product.id] = Number.isFinite(product.stock) ? product.stock : 0;
+      }
+    });
+    setInventoryCache(fallback);
   }
 }
 
 function loadInventoryObj() {
-  try {
-    return JSON.parse(localStorage.getItem('inventory') || '{}') || {};
-  } catch {
-    return {};
-  }
+  return { ...inventoryCache };
 }
 
 function saveInventoryObj(inv) {
-  localStorage.setItem('inventory', JSON.stringify(inv || {}));
+  setInventoryCache(inv || {});
 }
 
 function getStock(pid) {
   if (!pid) {
     return 0;
   }
-  const inv = loadInventoryObj();
-  const value = inv[pid];
+  const value = inventoryCache[pid];
   return Number.isFinite(value) ? Math.max(0, value) : 0;
 }
 
@@ -183,9 +472,9 @@ function setStock(pid, qty) {
   if (!pid) {
     return;
   }
-  const inv = loadInventoryObj();
-  inv[pid] = Math.max(0, qty | 0);
-  saveInventoryObj(inv);
+  const updated = { ...inventoryCache };
+  updated[pid] = Math.max(0, qty | 0);
+  setInventoryCache(updated);
 }
 
 function getRemainingForAdd(pid) {
@@ -265,6 +554,7 @@ function renderGrid(items) {
     card.className = 'product-card';
     card.tabIndex = 0;
     card.dataset.id = product.id;
+    card.dataset.itemId = product.id;
     if (isOutOfStock) {
       card.classList.add('out-of-stock');
       card.setAttribute('aria-disabled', 'true');
@@ -328,6 +618,7 @@ function renderGrid(items) {
     grid.appendChild(card);
   });
 
+  applyInventorySnapshot();
   console.log('[renderGrid] rendered', items.length, 'items');
 }
 
@@ -423,6 +714,8 @@ function openModal(product) {
 
   modal.classList.remove('hidden');
   document.body.classList.add('modal-open');
+
+  refreshModalStock(product.id).catch(() => {});
 
   if (canAddToCart) {
     (modalAddButton instanceof HTMLElement ? modalAddButton : modal.querySelector('.modal-add'))?.focus();
@@ -914,46 +1207,56 @@ async function submitOrder() {
   formData.append('message', lines.join('\n'));
 
   orderBtn.disabled = true;
+  const restoreButtonState = () => {
+    const btn = cartPopup?.querySelector('#orderBtn') || orderBtn;
+    if (!btn) {
+      return;
+    }
+    const currentName = (cartPopup?.querySelector('#custName')?.value ?? name ?? '').trim();
+    const currentEmail = (cartPopup?.querySelector('#custEmail')?.value ?? email ?? '').trim();
+    const consentChecked = !!cartPopup?.querySelector('#privacyConsent')?.checked;
+    const ready =
+      currentName.length > 0 &&
+      /\S+@\S+\.\S+/.test(currentEmail) &&
+      consentChecked;
+    btn.disabled = !ready;
+  };
 
-  try {
+  const onSubmit = async () => {
     const response = await fetch('https://api.web3forms.com/submit', {
       method: 'POST',
       body: formData,
     });
     const data = await response.json();
-    if (data.success) {
-      const inv = loadInventoryObj();
-      cart.forEach((item) => {
-        inv[item.id] = Math.max(0, (inv[item.id] ?? 0) - item.qty);
-      });
-      saveInventoryObj(inv);
-
-      saveCart([]);
-      cart = [];
-      cartFormState = { ...defaultFormState };
-      updateCartCount(cart);
-      renderCart();
-      renderGrid(products);
-      showToast('Заявка отправлена');
-      console.log('[order] inventory updated and cart cleared');
-
-      const form = document.getElementById('cartForm');
-      if (form) form.reset();
-      return;
+    if (!data.success) {
+      console.error('Web3Forms error:', data);
+      throw new Error('web3forms_failed');
     }
 
-    showToast('Не удалось отправить заявку, попробуйте позже');
-    console.error('Web3Forms error:', data);
-  } catch (error) {
-    console.error('Web3Forms request failed:', error);
-    showToast('Не удалось отправить заявку, попробуйте позже');
-  } finally {
-    const consentChecked = !!consentInput?.checked;
-    const ready =
-      name.length > 0 &&
-      /\S+@\S+\.\S+/.test(email) &&
-      consentChecked;
-    orderBtn.disabled = !ready;
+    saveCart([]);
+    cart = [];
+    cartFormState = { ...defaultFormState };
+    updateCartCount(cart);
+    renderCart();
+    renderGrid(products);
+    applyInventorySnapshot();
+    showToast('Заявка отправлена');
+    console.log('[order] inventory updated and cart cleared');
+
+    const form = document.getElementById('cartForm');
+    if (form) form.reset();
+  };
+
+  const ok = await handleCheckout(cart, {
+    onSubmit,
+    onError: () => {
+      showToast('Не удалось отправить заявку, попробуйте позже');
+    },
+    onFinally: restoreButtonState,
+  });
+
+  if (!ok) {
+    return;
   }
 }
 
