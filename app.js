@@ -37,6 +37,63 @@ if (typeof structuredClone !== 'function') {
   style.textContent = css;
   document.head.appendChild(style);
 })();
+// —— runtime styles (без правок HTML/CSS файлов)
+(function ensureRuntimeStylesAvailability(){
+  const ID = 'ngt-runtime-styles-availability-overlay';
+  if (document.getElementById(ID)) return;
+  const css = `
+    .stock-badge { display: none !important; }
+    [data-item-id].out-of-stock {
+      position: relative;
+      filter: grayscale(1) brightness(.8);
+    }
+    [data-item-id].out-of-stock::after {
+      content: "Нет в наличии";
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      letter-spacing: .03em;
+      color: #fff;
+      background: rgba(0,0,0,.45);
+      text-transform: none;
+      pointer-events: none;
+    }
+    .modal-image-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #modal .modal-slide-btn{
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 40px;
+      height: 40px;
+      border: none;
+      border-radius: 999px;
+      background: rgba(0,0,0,.55);
+      color: #fff;
+      font-size: 20px;
+      line-height: 1;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      z-index: 5;
+      transition: opacity .2s ease;
+    }
+    #modal .modal-slide-btn:hover{ background: rgba(0,0,0,.7); }
+    #modal .modal-slide-btn.prev{ left: 8px; }
+    #modal .modal-slide-btn.next{ right: 8px; }
+  `.trim();
+  const style = document.createElement('style');
+  style.id = ID;
+  style.textContent = css;
+  document.head.appendChild(style);
+})();
 const PRODUCT_MANIFEST = [
   {
     id: 'id1',
@@ -567,23 +624,11 @@ function renderGrid(items) {
     priceEl.className = 'product-price price';
     priceEl.textContent = formatPrice(product.price);
 
-    const stockBadge = document.createElement('div');
-    stockBadge.className = 'stock-badge';
-    stockBadge.textContent = stock > 0 ? `В наличии: ${stock}` : 'Нет в наличии';
-
     card.appendChild(titleEl);
     if (skuEl) {
       card.appendChild(skuEl);
     }
     card.appendChild(priceEl);
-    card.appendChild(stockBadge);
-
-    if (isOutOfStock) {
-      const oosBox = document.createElement('div');
-      oosBox.className = 'oos-box';
-      oosBox.textContent = 'Нет в наличии';
-      card.appendChild(oosBox);
-    }
 
     const handleOpen = () => openModal(product);
     card.addEventListener('click', handleOpen);
@@ -595,6 +640,42 @@ function renderGrid(items) {
     });
 
     grid.appendChild(card);
+  });
+
+  applyInventoryToCards(loadInventoryObj());
+}
+
+function applyInventoryToCards(stock) {
+  document.querySelectorAll('[data-item-id], [data-id]').forEach((card) => {
+    const id = card.getAttribute('data-item-id') || card.getAttribute('data-id');
+    let left = Number(stock?.[id]);
+    if (!Number.isFinite(left)) {
+      const productData = products.find((p) => p.id === id);
+      if (productData && Number.isFinite(productData.stock)) {
+        left = Number(productData.stock);
+      } else {
+        left = Number.POSITIVE_INFINITY;
+      }
+    }
+
+    const addBtns = card.querySelectorAll('.add-to-cart, .card-add, .modal-add');
+    addBtns.forEach((btn) => {
+      if (!btn) return;
+      btn.disabled = left <= 0;
+      btn.setAttribute('aria-disabled', left <= 0 ? 'true' : 'false');
+      if (left <= 0) {
+        if (!btn.dataset._originalText) btn.dataset._originalText = btn.textContent;
+        btn.textContent = 'Нет в наличии';
+      } else if (btn.dataset._originalText) {
+        btn.textContent = btn.dataset._originalText;
+      }
+    });
+
+    if (left <= 0) {
+      card.classList.add('out-of-stock');
+    } else {
+      card.classList.remove('out-of-stock');
+    }
   });
 }
 
@@ -632,6 +713,89 @@ function openModal(product) {
   if (modalPrice) {
     modalPrice.textContent = formatPrice(product.price);
   }
+
+  (function enhanceModal(currentProduct) {
+    const modalNode = document.getElementById('modal');
+    if (!modalNode) return;
+
+    const left = getStock(currentProduct.id);
+    const priceEl = modalNode.querySelector('.modal-price');
+    if (priceEl && Number.isFinite(left)) {
+      const noteId = 'modal-stock-note';
+      let note = modalNode.querySelector('#' + noteId);
+      if (!note) {
+        note = document.createElement('div');
+        note.id = noteId;
+        note.style.fontSize = '12px';
+        note.style.opacity = '0.8';
+        note.style.marginTop = '4px';
+        priceEl.insertAdjacentElement('afterend', note);
+      }
+      note.textContent = left > 0 ? `В наличии: ${left}` : 'Нет в наличии';
+    }
+
+    const content = modalNode.querySelector('.modal-content') || modalNode;
+    let wrapper = modalNode.querySelector('.modal-image-wrapper');
+    if (!wrapper) {
+      wrapper = document.createElement('div');
+      wrapper.className = 'modal-image-wrapper';
+      wrapper.style.position = 'relative';
+      wrapper.style.display = 'flex';
+      wrapper.style.alignItems = 'center';
+      wrapper.style.justifyContent = 'center';
+      const parent = modalImage?.parentElement || content;
+      if (parent && modalImage) {
+        parent.insertBefore(wrapper, modalImage);
+        wrapper.appendChild(modalImage);
+      }
+    } else if (modalImage && modalImage.parentElement !== wrapper) {
+      wrapper.appendChild(modalImage);
+    }
+
+    if (!wrapper.querySelector('.modal-slide-btn.prev')) {
+      const prev = document.createElement('button');
+      prev.className = 'modal-slide-btn prev';
+      prev.type = 'button';
+      prev.setAttribute('aria-label', 'Предыдущее изображение');
+      prev.textContent = '‹';
+
+      const next = document.createElement('button');
+      next.className = 'modal-slide-btn next';
+      next.type = 'button';
+      next.setAttribute('aria-label', 'Следующее изображение');
+      next.textContent = '›';
+
+      wrapper.appendChild(prev);
+      wrapper.appendChild(next);
+
+      const goNext = typeof window.modalSliderNext === 'function' ? window.modalSliderNext : null;
+      const goPrev = typeof window.modalSliderPrev === 'function' ? window.modalSliderPrev : null;
+
+      function datasetNext() {
+        try {
+          const st = JSON.parse(modalNode.dataset.slider || '{}');
+          if (!Array.isArray(st.list) || !st.list.length) return;
+          st.idx = ((st.idx ?? 0) + 1) % st.list.length;
+          modalNode.dataset.slider = JSON.stringify(st);
+          const img = modalNode.querySelector('.modal-image');
+          if (img) img.src = st.list[st.idx];
+        } catch {}
+      }
+      function datasetPrev() {
+        try {
+          const st = JSON.parse(modalNode.dataset.slider || '{}');
+          if (!Array.isArray(st.list) || !st.list.length) return;
+          st.idx = ((st.idx ?? 0) - 1 + st.list.length) % st.list.length;
+          modalNode.dataset.slider = JSON.stringify(st);
+          const img = modalNode.querySelector('.modal-image');
+          if (img) img.src = st.list[st.idx];
+        } catch {}
+      }
+
+      prev.addEventListener('click', () => (goPrev ? goPrev() : datasetPrev()));
+      next.addEventListener('click', () => (goNext ? goNext() : datasetNext()));
+    }
+  })(product);
 
   const remaining = getRemainingForAdd(product.id);
   const canAddToCart = remaining > 0;
@@ -1290,9 +1454,18 @@ async function submitOrder() {
 
   const state = { list: [], idx: 0 };
 
+  function syncDataset() {
+    try {
+      modalRoot.dataset.slider = JSON.stringify({ list: state.list, idx: state.idx });
+    } catch {
+      modalRoot.dataset.slider = '';
+    }
+  }
+
   function render() {
     if (!state.list.length) return;
     img.src = state.list[state.idx];
+    syncDataset();
   }
   function next() {
     if (state.list.length) {
@@ -1312,6 +1485,8 @@ async function submitOrder() {
     state.idx = 0;
     render();
   };
+  window.modalSliderNext = () => next();
+  window.modalSliderPrev = () => prev();
 
   document.addEventListener('keydown', (e) => {
     if (modalRoot.classList.contains('hidden')) return;
