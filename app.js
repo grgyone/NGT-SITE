@@ -1,3 +1,127 @@
+// --- polyfill: structuredClone (for legacy browsers)
+if (typeof structuredClone !== 'function') {
+  window.structuredClone = (obj) => JSON.parse(JSON.stringify(obj));
+}
+
+ /***** INVENTORY: remote shared store for static site (JSONBin) *****/
+ const INVENTORY_CFG = {
+   BASE: 'https://api.jsonbin.io/v3/b',
+   BIN_ID: '68f60e4ad0ea881f40ae1bd9',
+   API_KEY: '$2a$10$vI7KP04ItbCcX3XuPAVYb.2kocL9s21o4etSt8KBfy343z86FhOwG' // X-ACCESS-KEY (Read+Update)
+ };
+
+ const Inventory = (() => {
+   let cache = null;
+   let loading = null;
+
+   const headersWrite = {
+     'Content-Type': 'application/json',
+     'X-Access-Key': INVENTORY_CFG.API_KEY
+   };
+
+   async function loadRemote() {
+     // Чтение публичное; meta=false чтобы вернуть только record
+     const url = `${INVENTORY_CFG.BASE}/${INVENTORY_CFG.BIN_ID}/latest?meta=false`;
+     const res = await fetch(url, { cache: 'no-store' });
+     if (!res.ok) throw new Error('Inventory load failed');
+     const data = await res.json();
+     return data;
+   }
+
+   async function saveRemote(next) {
+     // Запись требует ключ
+     const url = `${INVENTORY_CFG.BASE}/${INVENTORY_CFG.BIN_ID}`;
+     const res = await fetch(url, {
+       method: 'PUT',
+       headers: headersWrite,
+       body: JSON.stringify(next)
+     });
+     if (!res.ok) throw new Error('Inventory save failed');
+     const data = await res.json();
+     // JSONBin при PUT возвращает объект c полем record; если его нет — вернём next
+     return data.record || next;
+   }
+
+   async function ensure() {
+     if (cache) return cache;
+     if (!loading) loading = loadRemote().then(d => (cache = d)).finally(() => (loading = null));
+     return loading;
+   }
+
+   function getLocal() {
+     try { return JSON.parse(localStorage.getItem('inventory_fallback')) || null; } catch { return null; }
+   }
+   function setLocal(obj) {
+     try { localStorage.setItem('inventory_fallback', JSON.stringify(obj)); } catch {}
+   }
+
+   async function getAll() {
+     try {
+       const data = await ensure();
+       if (!data.inventory) data.inventory = {};
+       setLocal(data);
+       return structuredClone(data.inventory);
+     } catch {
+       const fb = getLocal() || { inventory: {} };
+       return structuredClone(fb.inventory || {});
+     }
+   }
+
+   async function get(itemId) {
+     const inv = await getAll();
+     return Number(inv[itemId] ?? 0);
+   }
+
+   // Списание одной позиции
+   async function reserve(itemId, qty) {
+     const data = await ensure().catch(() => null);
+     let state = data || getLocal() || { inventory: {} };
+     if (!state.inventory) state.inventory = {};
+
+     const current = Number(state.inventory[itemId] ?? 0);
+     if (current < qty) return { ok: false, left: current };
+
+     state.inventory[itemId] = current - qty;
+
+     try {
+       const saved = await saveRemote(state);
+       cache = saved;
+       setLocal(saved);
+       return { ok: true, left: Number(saved.inventory[itemId] ?? 0) };
+     } catch {
+       return { ok: false, left: current };
+     }
+   }
+
+   // Массовое списание: cartMap = { id: qty }
+   async function reserveMany(cartMap) {
+     const data = await ensure().catch(() => null);
+     let state = data || getLocal() || { inventory: {} };
+     if (!state.inventory) state.inventory = {};
+
+     // Проверка достаточности
+     for (const [id, q] of Object.entries(cartMap)) {
+       const have = Number(state.inventory[id] ?? 0);
+       if (have < q) return { ok: false, insufficient: { id, need: q, have } };
+     }
+     // Списание
+     for (const [id, q] of Object.entries(cartMap)) {
+       state.inventory[id] = Number(state.inventory[id] ?? 0) - q;
+     }
+
+     try {
+       const saved = await saveRemote(state);
+       cache = saved;
+       setLocal(saved);
+       return { ok: true, left: saved.inventory };
+     } catch {
+       return { ok: false, error: 'save_failed' };
+     }
+   }
+
+   return { getAll, get, reserve, reserveMany };
+ })();
+
 const WEB3FORMS_ACCESS_KEY = '97052283-3d2d-46b2-86ca-c21f81998914';
 const CART_STORAGE_KEY = 'cart';
 const CART_TRANSITION_MS = 200;
@@ -28,6 +152,12 @@ let cartFormState = { ...defaultFormState };
 let activeProduct = null;
 let cartHideTimeout = null;
 let modalEscHandler = null;
+let checkoutInProgress = false;
+
+function setCartState(nextCart) {
+  cart = Array.isArray(nextCart) ? nextCart : [];
+}
+
 
 function getModalRoot() {
   return (
@@ -46,7 +176,7 @@ function getModalOverlay(modalEl) {
 document.addEventListener('DOMContentLoaded', async () => {
   try {
     await loadCatalog();
-    ensureInventoryFromCatalog(products);
+    await ensureInventoryFromCatalog(products);
     renderGrid(products);
     console.log('[init] grid rendered', products.length, 'items');
   } catch (error) {
@@ -58,6 +188,46 @@ document.addEventListener('DOMContentLoaded', async () => {
   syncCartWithInventory();
   updateCartCount();
   renderCart();
+});
+
+// Обновление состояния карточек по остаткам
+function applyInventoryToCards(stock) {
+  document.querySelectorAll('[data-item-id], [data-id]').forEach((card) => {
+    const id = card.getAttribute('data-item-id') || card.getAttribute('data-id');
+    const left = Number(stock?.[id] ?? 0);
+
+    const addBtns = card.querySelectorAll('.add-to-cart, .card-add, .modal-add');
+    addBtns.forEach((btn) => {
+      if (!btn) return;
+      const isOutOfStock = left <= 0;
+      btn.disabled = isOutOfStock;
+      btn.setAttribute('aria-disabled', isOutOfStock ? 'true' : 'false');
+      if (isOutOfStock) {
+        if (!btn.dataset._originalText) btn.dataset._originalText = btn.textContent;
+        btn.textContent = '\u041d\u0435\u0442 \u0432 \u043d\u0430\u043b\u0438\u0447\u0438\u0438';
+      } else if (btn.dataset._originalText) {
+        btn.textContent = btn.dataset._originalText;
+      }
+    });
+
+    const badge = card.querySelector('.stock-badge');
+    if (badge) {
+      badge.textContent = left > 0
+        ? '\u0412 \u043d\u0430\u043b\u0438\u0447\u0438\u0438: ' + left
+        : '\u041d\u0435\u0442 \u0432 \u043d\u0430\u043b\u0438\u0447\u0438\u0438';
+    }
+  });
+}
+
+
+document.addEventListener('DOMContentLoaded', async () => {
+  try {
+    const stock = await Inventory.getAll();
+    saveInventoryObj(stock);
+    applyInventoryToCards(stock);
+  } catch {
+    // Без сети — тихо пропускаем
+  }
 });
 cartTrigger?.addEventListener('click', (event) => {
   event.stopPropagation();
@@ -132,42 +302,76 @@ function normalizeProduct(raw) {
   };
 }
 
-function ensureInventoryFromCatalog(items) {
-  const raw = localStorage.getItem('inventory');
-  let inv;
+async function ensureInventoryFromCatalog(items) {
+  let remoteInventory = {};
   try {
-    inv = raw ? JSON.parse(raw) : {};
-  } catch {
-    inv = {};
+    remoteInventory = await Inventory.getAll();
+  } catch (error) {
+    console.warn('[inventory] failed to load remote inventory, fallback to local cache', error);
+    remoteInventory = loadInventoryObj();
   }
+
   let changed = false;
+  const next = { ...remoteInventory };
   (items || []).forEach((product) => {
     if (!product || product.id == null) {
       return;
     }
-    if (inv[product.id] == null) {
-      inv[product.id] = Number.isFinite(product.stock) ? product.stock : 0;
+    if (next[product.id] == null) {
+      const initial = Number.isFinite(product.stock) ? Math.max(0, Number(product.stock) || 0) : 0;
+      next[product.id] = initial;
       changed = true;
     }
   });
+
+  saveInventoryObj(next);
   if (changed) {
-    localStorage.setItem('inventory', JSON.stringify(inv));
-    console.log('[inventory] initialized from catalog');
+    console.log('[inventory] enriched with catalog defaults');
   } else {
-    console.log('[inventory] already present');
+    console.log('[inventory] synced from remote');
   }
 }
 
 function loadInventoryObj() {
   try {
-    return JSON.parse(localStorage.getItem('inventory') || '{}') || {};
-  } catch {
-    return {};
+    const raw = localStorage.getItem('inventory');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        return parsed;
+      }
+    }
+  } catch (error) {
+    console.warn('[inventory] local parse failed, fallback to backup', error);
   }
+
+  try {
+    const fallbackRaw = localStorage.getItem('inventory_fallback');
+    if (fallbackRaw) {
+      const parsedFallback = JSON.parse(fallbackRaw);
+      if (parsedFallback && typeof parsedFallback === 'object' && parsedFallback.inventory) {
+        return { ...parsedFallback.inventory };
+      }
+    }
+  } catch (error) {
+    console.warn('[inventory] fallback parse failed', error);
+  }
+
+  return {};
 }
 
 function saveInventoryObj(inv) {
-  localStorage.setItem('inventory', JSON.stringify(inv || {}));
+  const safe = inv && typeof inv === 'object' ? inv : {};
+  try {
+    localStorage.setItem('inventory', JSON.stringify(safe));
+  } catch (error) {
+    console.warn('[inventory] failed to save primary cache', error);
+  }
+  try {
+    localStorage.setItem('inventory_fallback', JSON.stringify({ inventory: safe }));
+  } catch (error) {
+    console.warn('[inventory] failed to save fallback cache', error);
+  }
 }
 
 function getStock(pid) {
@@ -247,6 +451,46 @@ function renderGrid(items) {
   }
 
   grid.innerHTML = '';
+  // --- temporary products NEW GRGY TIMES test
+  const tempProducts = [
+    {
+      id: 'id1',
+      title: 'NEW GRGY TIMES test',
+      description: 'NEW GRGY TIMES test',
+      price: '1000',
+      quantity: 5,
+      images: ['./items/id1/id1-1.png', './items/id1/id1-2.png']
+    },
+    {
+      id: 'id2',
+      title: 'NEW GRGY TIMES test',
+      description: 'NEW GRGY TIMES test',
+      price: '2000',
+      quantity: 3,
+      images: ['./items/id2/id2-1.png', './items/id2/id2-2.png', './items/id2/id2-3.png']
+    },
+    {
+      id: 'id3',
+      title: 'NEW GRGY TIMES test',
+      description: 'NEW GRGY TIMES test',
+      price: '3000',
+      quantity: 7,
+      images: ['./items/id3/id3-1.png', './items/id3/id3-2.png']
+    }
+  ];
+  tempProducts.forEach((tempProduct) => {
+    const existsInProducts = products.some((item) => item && item.id === tempProduct.id);
+    if (!existsInProducts) {
+      products.push(tempProduct);
+    }
+    if (Array.isArray(items)) {
+      const existsInItems = items.some((item) => item && item.id === tempProduct.id);
+      if (!existsInItems) {
+        items.push(tempProduct);
+      }
+    }
+  });
+
 
   if (!Array.isArray(items) || items.length === 0) {
     return;
@@ -265,6 +509,7 @@ function renderGrid(items) {
     card.className = 'product-card';
     card.tabIndex = 0;
     card.dataset.id = product.id;
+    card.setAttribute('data-item-id', product.id);
     if (isOutOfStock) {
       card.classList.add('out-of-stock');
       card.setAttribute('aria-disabled', 'true');
@@ -717,7 +962,9 @@ function setupCartForm() {
     orderBtn.disabled = !ready;
   };
 
-  orderBtn.disabled = true;
+  if (orderBtn) {
+    orderBtn.disabled = true;
+  }
 
   if (telegramInput) {
     telegramInput.addEventListener('focus', () => {
@@ -852,16 +1099,32 @@ function toggleCartPopup() {
   }
 }
 
-async function submitOrder() {
-  const orderBtn = cartPopup?.querySelector('#orderBtn');
-  if (!orderBtn || orderBtn.disabled) {
-    return;
+async function submitOrder(cart) {
+  if (!cart || !cart.length) {
+    showToast('\\u041a\\u043e\\u0440\\0437\\u0438\\u043d\\u0430 \\u043f\\u0443\\u0441\\u0442\\u0430');
+    return false;
   }
 
-  cart = loadCart();
-  if (!cart || !cart.length) {
-    showToast('Корзина пуста');
-    return;
+  const orderBtn = cartPopup?.querySelector('#orderBtn');
+  if (orderBtn && orderBtn.disabled) {
+    return false;
+  }
+
+  const normalizedCart = (Array.isArray(cart) ? cart : [])
+    .map((item) => ({
+        id: String(item.id),
+        title: item.title,
+        price: Number(item.price) || 0,
+        image: item.image,
+        qty: Math.max(0, Number(item.qty) || 0),
+      }));
+
+  setCartState(normalizedCart);
+  cart = normalizedCart;
+
+  if (!cart.length) {
+    showToast('\\u041a\\u043e\\u0440\\0437\\u0438\\043d\\u0430 \\u043f\\u0443\\u0441\\u0442\\u0430');
+    return false;
   }
 
   const nameInput = document.getElementById('custName');
@@ -913,7 +1176,9 @@ async function submitOrder() {
   formData.append('email', 'grgyone@gmail.com');
   formData.append('message', lines.join('\n'));
 
-  orderBtn.disabled = true;
+  if (orderBtn) {
+    orderBtn.disabled = true;
+  }
 
   try {
     const response = await fetch('https://api.web3forms.com/submit', {
@@ -922,40 +1187,112 @@ async function submitOrder() {
     });
     const data = await response.json();
     if (data.success) {
-      const inv = loadInventoryObj();
-      cart.forEach((item) => {
-        inv[item.id] = Math.max(0, (inv[item.id] ?? 0) - item.qty);
-      });
-      saveInventoryObj(inv);
-
-      saveCart([]);
-      cart = [];
-      cartFormState = { ...defaultFormState };
-      updateCartCount(cart);
-      renderCart();
-      renderGrid(products);
-      showToast('Заявка отправлена');
-      console.log('[order] inventory updated and cart cleared');
-
-      const form = document.getElementById('cartForm');
-      if (form) form.reset();
-      return;
+      console.log('[order] submission sent via Web3Forms');
+      return true;
     }
 
     showToast('Не удалось отправить заявку, попробуйте позже');
     console.error('Web3Forms error:', data);
+    return false;
   } catch (error) {
     console.error('Web3Forms request failed:', error);
     showToast('Не удалось отправить заявку, попробуйте позже');
+    return false;
   } finally {
     const consentChecked = !!consentInput?.checked;
     const ready =
       name.length > 0 &&
       /\S+@\S+\.\S+/.test(email) &&
       consentChecked;
-    orderBtn.disabled = !ready;
+    if (orderBtn) {
+      orderBtn.disabled = !ready;
+    }
   }
 }
+
+async function handleCheckout(cartItems) {
+  if (checkoutInProgress) {
+    return false;
+  }
+  checkoutInProgress = true;
+
+  let latestInventory = null;
+
+  try {
+    const itemsSource = Array.isArray(cartItems) ? cartItems : loadCart();
+    const normalized = (itemsSource || [])
+      .map((item) => ({
+        id: String(item?.id ?? ''),
+        title: item?.title || '',
+        price: Number(item?.price) || 0,
+        image: item?.image,
+        qty: Math.max(0, Number(item?.qty) || 0),
+      }))
+      .filter((item) => item.id && item.qty > 0);
+
+    if (!normalized.length) {
+      showToast('\\u041a\\u043e\\u0440\\0437\\u0438\\043d\\u0430 \\u043f\\u0443\\u0441\\u0442\\u0430');
+      return false;
+    }
+
+    const cartMap = {};
+    normalized.forEach((item) => {
+      const id = String(item.id);
+      cartMap[id] = (cartMap[id] || 0) + item.qty;
+    });
+
+    const res = await Inventory.reserveMany(cartMap);
+    if (!res.ok) {
+      if (res.insufficient) {
+        const { id, need, have } = res.insufficient;
+        showToast(`������������ ������: ${id}. ����� ${need}, �������� ${have}.`);
+      } else {
+        showToast('�� ������� ����������� �������. ���������� ��� ���.');
+      }
+      return false;
+    }
+
+    latestInventory = res.left || null;
+    if (latestInventory) {
+      saveInventoryObj(latestInventory);
+      applyInventoryToCards(latestInventory);
+    }
+
+    const sent = await submitOrder(normalized);
+    if (!sent) {
+      return false;
+    }
+
+    clearCart();
+    renderGrid(products);
+
+    if (latestInventory) {
+      applyInventoryToCards(latestInventory);
+    } else {
+      try {
+        const stock = await Inventory.getAll();
+        saveInventoryObj(stock);
+        applyInventoryToCards(stock);
+      } catch {}
+    }
+    const form = document.getElementById('cartForm');
+    if (form) form.reset();
+    showToast('����� ��������. �������!');
+    return true;
+  } catch (error) {
+    console.error('[checkout] handleCheckout error', error);
+    showToast('������ �������� ������. ���������� �����.');
+    try {
+      const stock = await Inventory.getAll();
+      saveInventoryObj(stock);
+      applyInventoryToCards(stock);
+    } catch {}
+    return false;
+  } finally {
+    checkoutInProgress = false;
+  }
+}
+window.handleCheckout = handleCheckout;
 
 function handleCartPopupClick(event) {
   const target = event.target;
@@ -969,7 +1306,7 @@ function handleCartPopupClick(event) {
   }
 
   if (action === 'checkout') {
-    submitOrder();
+    handleCheckout(loadCart());
     return;
   }
 
@@ -1009,6 +1346,7 @@ function handleCartPopupClick(event) {
     removeFromCart(productId);
   }
 }
+
 
 function handleCartPopupChange(event) {
   const target = event.target;
