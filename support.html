@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Support — NEW GRGY TIMES</title>
+  <link rel="icon" href="./favicon.ico">
+  <link rel="stylesheet" href="./styles.css">
+  <style>
+    /* Локальная косметика формы + надёжная контрастность кнопок */
+    .support-card{max-width:720px;margin:2rem auto;padding:1.25rem;border:1px solid #e5e7eb;border-radius:14px;background:#fff}
+    .support-card h2{font-size:1.25rem;margin:0 0 .75rem}
+    .form-row{display:flex;flex-direction:column;gap:.375rem;margin-bottom:.9rem}
+    .form-row label{font-weight:600}
+    .form-row input,.form-row textarea{padding:.7rem .8rem;border:1px solid #d1d5db;border-radius:10px;font:inherit;width:100%}
+    .form-actions{display:flex;flex-wrap:wrap;gap:.6rem;margin-top:.6rem}
+
+    .btn{appearance:none;border:1px solid #111;border-radius:999px;padding:.7rem 1rem;cursor:pointer;background:#111;color:#fff;text-align:center;display:inline-block;line-height:1;text-decoration:none}
+    /* ССЫЛКИ-кнопки должны быть белыми: переопределяем возможные глобальные стили <a> */
+    a.btn{color:#fff !important;text-decoration:none !important}
+    .btn:hover{opacity:.9}
+    .btn:focus-visible{outline:2px solid #111;outline-offset:2px}
+    .btn.secondary{background:#fff;color:#111 !important;border-color:#111}
+
+    /* Тост-попап (видимость гарантируем локально) */
+    #toast.toast{
+      position:fixed;left:50%;bottom:24px;transform:translateX(-50%);
+      min-width:220px;max-width:90vw;padding:.65rem .9rem;border-radius:10px;
+      background:#111;color:#fff;font-size:.95rem;
+      opacity:0;pointer-events:none;transition:opacity .18s ease, transform .18s ease;
+      z-index:1000; box-shadow:0 10px 30px rgba(0,0,0,.15)
+    }
+    #toast.toast.show{opacity:1;pointer-events:auto;transform:translateX(-50%) translateY(-2px)}
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="./index.html">
+        <img src="./logo.png" alt="NEW GRGY TIMES" class="brand-logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';">
+        <span class="brand-text">NEW GRGY TIMES</span>
+      </a>
+      <button class="cart-icon" type="button" aria-label="Корзина">
+        <img src="./bag.png" alt="Cart" class="cart-icon-img">
+        <span id="cart-count" class="cart-count hidden">0</span>
+      </button>
+    </div>
+  </header>
+
+  <div id="cart-popup" class="cart-popup hidden">
+    <p>Корзина пуста</p>
+  </div>
+
+  <main class="container page-content">
+    <h1>Support</h1>
+
+    <section class="support-card" aria-labelledby="support-title">
+      <h2 id="support-title">Заполните форму</h2>
+
+      <div class="form-row">
+        <label for="fullName">Полное имя:</label>
+        <input id="fullName" name="fullName" type="text" placeholder="Иван Иванов" autocomplete="name">
+      </div>
+
+      <div class="form-row">
+        <label for="orderNumber">Номер заказа:</label>
+        <input id="orderNumber" name="orderNumber" type="text" placeholder="Напр.: ORD-1234">
+      </div>
+
+      <div class="form-row">
+        <label for="trackingNumber">Номер отслеживания:</label>
+        <input id="trackingNumber" name="trackingNumber" type="text" placeholder="Напр.: RB123456789RU">
+      </div>
+
+      <div class="form-row">
+        <label for="details">Кратко опишите ваш запрос со всеми необходимыми деталями:</label>
+        <textarea id="details" name="details" rows="6" placeholder="Опишите ситуацию, приложите важные детали (даты, ссылки на фото/видео и т. п.)"></textarea>
+      </div>
+
+      <div class="form-actions">
+        <button id="copyFormBtn" type="button" class="btn" aria-label="Скопировать форму">Скопировать форму</button>
+      </div>
+
+      <p class="subtle" style="color:#6b7280;font-size:.95rem;margin:.75rem 0 0">
+        Текст заявки попадёт в буфер обмена — вставьте его в Telegram или письмо.
+      </p>
+
+      <h2 style="margin-top:1.25rem">Отправьте нам вашу заполненную форму</h2>
+      <div class="form-actions">
+        <a id="tgBtn" class="btn" href="https://t.me/grgyone" target="_blank" rel="noopener" aria-label="Открыть чат Telegram с @grgyone">Отправить в Telegram</a>
+        <button id="mailBtn" type="button" class="btn secondary" aria-label="Отправить по email">Отправить по email</button>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-links">
+      <a href="./index.html">Home</a>
+      <a href="./about.html">About</a>
+      <a href="./contacts.html">Contacts</a>
+      <a id="footer-privacy" href="./privacy.html">Privacy Policy</a>
+      <a href="./termsofservice.html" aria-current="page">Terms of Service</a>
+      <a href="./rrpolicy.html">Return &amp; Refund Policy</a>
+      <a href="./support.html">Support</a>
+    </div>
+    <div class="container copyright">&copy; 2025 NEW GRGY TIMES</div>
+  </footer>
+
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-content">
+      <img src="./0.png" alt="" class="modal-image">
+      <h2 id="modal-title" class="modal-title"></h2>
+      <p class="modal-description"></p>
+      <p class="modal-price"></p>
+      <div class="qty-row">
+        <button type="button" class="qty-btn" data-action="dec" aria-label="Минус">−</button>
+        <input type="number" class="qty-input" value="1" min="1" aria-label="Количество">
+        <button type="button" class="qty-btn" data-action="inc" aria-label="Плюс">+</button>
+      </div>
+      <button type="button" class="modal-add">Добавить в корзину</button>
+      <button type="button" class="modal-close">Закрыть</button>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    // Ждём DOM, чтобы исключить гонки при привязке событий
+    document.addEventListener('DOMContentLoaded', () => {
+      const qs = (id) => document.getElementById(id);
+
+      const fullName = qs('fullName');
+      const orderNumber = qs('orderNumber');
+      const trackingNumber = qs('trackingNumber');
+      const details = qs('details');
+      const copyBtn = qs('copyFormBtn');
+      const mailBtn = qs('mailBtn');
+      const toastEl = qs('toast');
+
+      function buildFormText() {
+        const name = (fullName.value || '').trim();
+        const order = (orderNumber.value || '').trim();
+        const track = (trackingNumber.value || '').trim();
+        const text = (details.value || '').trim();
+
+        return [
+          'Заполненная форма поддержки — NEW GRGY TIMES',
+          `Полное имя: ${name || '—'}`,
+          `Номер заказа: ${order || '—'}`,
+          `Номер отслеживания: ${track || '—'}`,
+          'Запрос:',
+          text || '—'
+        ].join('\n');
+      }
+
+      function showToast(msg) {
+        if (!toastEl) { alert(msg); return; }
+        toastEl.textContent = msg;
+        toastEl.classList.add('show');
+        window.setTimeout(() => toastEl.classList.remove('show'), 2200);
+      }
+
+      async function copyTextToClipboard(text) {
+        // 1) Современный API (работает по HTTPS)
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text);
+          return true;
+        }
+        // 2) Надёжный fallback через временное textarea
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.top = '-9999px';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        let ok = false;
+        try {
+          ok = document.execCommand('copy');
+        } catch (_) {
+          ok = false;
+        }
+        document.body.removeChild(ta);
+        return ok;
+      }
+
+      copyBtn.addEventListener('click', async () => {
+        const text = buildFormText();
+        const ok = await copyTextToClipboard(text);
+        showToast(ok ? 'Форма скопирована в буфер обмена.' : 'Не удалось скопировать. Попробуйте вручную (Ctrl/Cmd+C).');
+      });
+
+      mailBtn.addEventListener('click', () => {
+        const subject = 'Support request — NEW GRGY TIMES';
+        const body = buildFormText();
+        const mailto = 'mailto:grgyone@gmail.com'
+          + '?subject=' + encodeURIComponent(subject)
+          + '&body=' + encodeURIComponent(body);
+        window.location.href = mailto;
+      });
+    });
+  </script>
+
+  <script src="./app.js"></script>
+</body>
+</html>
