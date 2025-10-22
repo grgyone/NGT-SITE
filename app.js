@@ -1,4 +1,4 @@
-﻿// Отключение автосмены изображений на главной
+// Отключение автосмены изображений на главной
 const NGT_DISABLE_CARD_AUTOPLAY = true;
 
 // --- polyfill: structuredClone (на случай старых браузеров)
@@ -43,11 +43,11 @@ if (typeof structuredClone !== 'function') {
   if (document.getElementById(ID)) return;
   const css = `
     .stock-badge { display: none !important; }
-    [data-item-id].out-of-stock {
+    [data-item-id].soldout {
       position: relative;
       filter: grayscale(1) brightness(.8);
     }
-    [data-item-id].out-of-stock::after {
+    [data-item-id].soldout::after {
       content: "Нет в наличии";
       position: absolute;
       inset: 0;
@@ -88,6 +88,54 @@ if (typeof structuredClone !== 'function') {
     #modal .modal-slide-btn:hover{ background: rgba(0,0,0,.7); }
     #modal .modal-slide-btn.prev{ left: 8px; }
     #modal .modal-slide-btn.next{ right: 8px; }
+    body.inventory-busy {
+      cursor: progress;
+    }
+    #inventory-spinner {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,.25);
+      backdrop-filter: blur(2px);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity .2s ease;
+      z-index: 9999;
+    }
+    body.inventory-busy #inventory-spinner {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #inventory-spinner .box {
+      padding: 18px 26px;
+      border-radius: 12px;
+      background: rgba(0,0,0,.6);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.35);
+    }
+    #inventory-spinner .spinner {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      border: 3px solid rgba(255,255,255,.35);
+      border-top-color: #fff;
+      animation: ngt-spin 1s linear infinite;
+    }
+    #inventory-spinner .label {
+      color: #fff;
+      font-size: 14px;
+      line-height: 1.4;
+      text-align: center;
+    }
+    @keyframes ngt-spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
   `.trim();
   const style = document.createElement('style');
   style.id = ID;
@@ -125,7 +173,321 @@ const ALLOWED_IDS = new Set(PRODUCT_MANIFEST.map((item) => String(item.id)));
 const DEFAULT_IMAGE = './0.png';
 const WEB3FORMS_ACCESS_KEY = '97052283-3d2d-46b2-86ca-c21f81998914';
 const CART_STORAGE_KEY = 'cart';
-const INVENTORY_STORAGE_KEY = 'inventory';
+const INVENTORY_CACHE_KEY = 'inventory_cache_v1';
+const ORDER_TELEGRAM_URL = 'https://t.me/grgyone';
+
+const JSONBIN = {
+  BIN_ID: '68f60e4ad0ea881f40ae1bd9',
+  MASTER_KEY: '$2a$10$cO3HgbohdzMjWRNpU2vriO.jAwVEE6AuOFo0MLls68F1Csom8kPRm',
+  ACCESS_KEY: 'ngt-site $2a$10$vI7KP04ItbCcX3XuPAVYb.2kocL9s21o4etSt8KBfy343z86FhOwG',
+  BASE: 'https://api.jsonbin.io/v3/b',
+};
+
+let inventoryState = {};
+let inventoryActivityCounter = 0;
+let inventoryReady = false;
+
+function ensureInventorySpinner() {
+  if (document.getElementById('inventory-spinner')) {
+    return;
+  }
+  const wrapper = document.createElement('div');
+  wrapper.id = 'inventory-spinner';
+  const box = document.createElement('div');
+  box.className = 'box';
+  const spinner = document.createElement('div');
+  spinner.className = 'spinner';
+  const label = document.createElement('div');
+  label.className = 'label';
+  label.textContent = 'Обновляем наличие…';
+  box.appendChild(spinner);
+  box.appendChild(label);
+  wrapper.appendChild(box);
+  document.body?.appendChild(wrapper);
+}
+
+function updateInventoryLoading(message) {
+  const body = document.body;
+  if (!body) {
+    return;
+  }
+  ensureInventorySpinner();
+  const spinner = document.getElementById('inventory-spinner');
+  const label = spinner?.querySelector('.label');
+  if (label && typeof message === 'string' && message.trim().length) {
+    label.textContent = message.trim();
+  }
+  if (inventoryActivityCounter > 0) {
+    body.classList.add('inventory-busy');
+  } else {
+    body.classList.remove('inventory-busy');
+  }
+}
+
+function pushInventoryActivity(message) {
+  inventoryActivityCounter += 1;
+  updateInventoryLoading(message);
+}
+
+function popInventoryActivity() {
+  inventoryActivityCounter = Math.max(0, inventoryActivityCounter - 1);
+  updateInventoryLoading();
+}
+
+function readInventoryCache() {
+  try {
+    const raw = sessionStorage.getItem(INVENTORY_CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeInventoryCache(data) {
+  try {
+    sessionStorage.setItem(INVENTORY_CACHE_KEY, JSON.stringify(data ?? {}));
+  } catch {
+    // ignore quota errors
+  }
+}
+
+function clearInventoryCache() {
+  try {
+    sessionStorage.removeItem(INVENTORY_CACHE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+function normalizeInventoryData(raw, referenceList) {
+  const safeRaw = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  const normalized = {};
+  Object.keys(safeRaw).forEach((key) => {
+    const entry = safeRaw[key];
+    if (entry && typeof entry === 'object') {
+      const clone = structuredClone(entry);
+      const stockValue = Number(clone.stock);
+      clone.stock = Number.isFinite(stockValue) ? Math.max(0, stockValue) : 0;
+      normalized[key] = clone;
+    } else {
+      const stockValue = Number(entry);
+      normalized[key] = { stock: Number.isFinite(stockValue) ? Math.max(0, stockValue) : 0 };
+    }
+  });
+
+  (Array.isArray(referenceList) ? referenceList : []).forEach((product) => {
+    if (!product || typeof product.id === 'undefined') {
+      return;
+    }
+    const id = String(product.id);
+    const fallbackStock = Math.max(0, Number(product.stock) || 0);
+    if (!normalized[id]) {
+      normalized[id] = { stock: fallbackStock };
+    } else if (!Number.isFinite(Number(normalized[id].stock))) {
+      normalized[id].stock = fallbackStock;
+    }
+    if (normalized[id].price == null && Number.isFinite(Number(product.price))) {
+      normalized[id].price = Number(product.price);
+    }
+  });
+
+  return normalized;
+}
+
+function setInventoryState(nextState, options = {}) {
+  const snapshot = nextState && typeof nextState === 'object' ? nextState : {};
+  inventoryState = {};
+  Object.keys(snapshot).forEach((key) => {
+    const value = snapshot[key];
+    if (value && typeof value === 'object') {
+      inventoryState[key] = structuredClone(value);
+    } else {
+      const stockValue = Number(value);
+      inventoryState[key] = { stock: Number.isFinite(stockValue) ? Math.max(0, stockValue) : 0 };
+    }
+  });
+
+  if (options.cache) {
+    writeInventoryCache(inventoryState);
+  }
+
+  applyInventoryToProducts(inventoryState);
+}
+
+async function fetchInventory(options = {}) {
+  pushInventoryActivity(options.message ?? 'Обновляем наличие…');
+  try {
+    const response = await fetch(`${JSONBIN.BASE}/${JSONBIN.BIN_ID}/latest`, {
+      method: 'GET',
+      headers: {
+        'X-Master-Key': JSONBIN.MASTER_KEY,
+        'X-Access-Key': JSONBIN.ACCESS_KEY,
+        'X-Bin-Meta': 'false',
+      },
+      signal: options.signal,
+    });
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      throw new Error(text ? `Fetch inventory failed: ${response.status} ${text}` : `Fetch inventory failed: ${response.status}`);
+    }
+    const payload = await response.json();
+    const data = payload?.record ?? payload;
+    const normalized = normalizeInventoryData(data, products?.length ? products : PRODUCT_MANIFEST);
+    setInventoryState(normalized, { cache: true });
+    inventoryReady = true;
+    return structuredClone(inventoryState);
+  } finally {
+    popInventoryActivity();
+  }
+}
+
+async function saveInventory(data, options = {}) {
+  pushInventoryActivity(options.message ?? 'Сохраняем наличие…');
+  try {
+    const response = await fetch(`${JSONBIN.BASE}/${JSONBIN.BIN_ID}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Master-Key': JSONBIN.MASTER_KEY,
+        'X-Access-Key': JSONBIN.ACCESS_KEY,
+      },
+      body: JSON.stringify(data),
+      signal: options.signal,
+    });
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      throw new Error(text ? `Save inventory failed: ${response.status} ${text}` : `Save inventory failed: ${response.status}`);
+    }
+    const payload = await response.json();
+    const result = payload?.record ?? payload;
+    const normalized = normalizeInventoryData(result, products);
+    setInventoryState(normalized, { cache: true });
+    inventoryReady = true;
+    return structuredClone(inventoryState);
+  } finally {
+    popInventoryActivity();
+  }
+}
+
+
+function createStockError(message) {
+  const error = new Error(message);
+  error.code = 'OUT_OF_STOCK';
+  return error;
+}
+
+async function decrementInventoryOrFail(cartItems) {
+  if (!Array.isArray(cartItems) || cartItems.length === 0) {
+    const snapshot = getInventorySnapshot();
+    return { next: snapshot, previous: snapshot };
+  }
+
+  const runAttempt = async () => {
+    const remote = await fetchInventory({ message: 'Checking stock...' });
+    const current = structuredClone(remote);
+
+    cartItems.forEach((item) => {
+      const id = String(item.id);
+      if (!current[id]) {
+        const product = products.find((p) => p.id === id);
+        const fallbackStock = Math.max(0, Number(product?.stock) || 0);
+        current[id] = { stock: fallbackStock };
+        if (product && Number.isFinite(Number(product.price))) {
+          current[id].price = Number(product.price);
+        }
+      }
+      const available = Math.max(0, Number(current[id].stock) || 0);
+      if (item.qty > available) {
+        setInventoryState(current, { cache: true });
+        const title = item.title || products.find((p) => p.id === id)?.title || id;
+        throw createStockError('Not enough stock for: ' + title);
+      }
+    });
+
+    setInventoryState(current, { cache: true });
+    const base = structuredClone(current);
+    const next = structuredClone(current);
+    cartItems.forEach((item) => {
+      const id = String(item.id);
+      const record = next[id] || (next[id] = { stock: 0 });
+      const available = Math.max(0, Number(record.stock) || 0);
+      record.stock = Math.max(0, available - item.qty);
+    });
+
+    await saveInventory(next, { message: 'Updating stock...' });
+    const latest = structuredClone(inventoryState);
+    return { next: latest, previous: base };
+  };
+
+  try {
+    return await runAttempt();
+  } catch (error) {
+    if (error?.code === 'OUT_OF_STOCK') {
+      throw error;
+    }
+    return runAttempt();
+  }
+}
+async function restoreInventoryQuantities(cartItems) {
+  if (!Array.isArray(cartItems) || cartItems.length === 0) {
+    return;
+  }
+  try {
+    const remote = await fetchInventory({ message: 'Возвращаем остатки…' });
+    const next = structuredClone(remote);
+    cartItems.forEach((item) => {
+      const id = String(item.id);
+      const record = next[id] || (next[id] = { stock: 0 });
+      const current = Math.max(0, Number(record.stock) || 0);
+      const qty = Math.max(0, Number(item.qty) || 0);
+      record.stock = current + qty;
+    });
+    await saveInventory(next, { message: 'Сохраняем наличие…' });
+  } catch (error) {
+    console.error('[inventory] rollback failed:', error);
+  }
+}
+function getInventoryRecord(productId) {
+  if (!productId) {
+    return null;
+  }
+  const record = inventoryState[String(productId)];
+  if (record && typeof record === 'object') {
+    return record;
+  }
+  return null;
+}
+
+function applyInventoryToProducts(inventory) {
+  if (!Array.isArray(products)) {
+    return;
+  }
+  products.forEach((product) => {
+    if (!product || !product.id) {
+      return;
+    }
+    const id = String(product.id);
+    const record = inventory?.[id];
+    if (record && typeof record === 'object') {
+      if (Number.isFinite(Number(record.stock))) {
+        product.stock = Math.max(0, Number(record.stock));
+      }
+      if (record.price != null && Number.isFinite(Number(record.price))) {
+        product.price = Number(record.price);
+      }
+    }
+  });
+  mirrorProducts();
+  applyInventoryToCards(inventoryState);
+}
+
+function mirrorProducts() {
+  if (!Array.isArray(products)) {
+    window.products = [];
+    return;
+  }
+  window.products = products.map((item) => ({ ...item }));
+}
 const CART_TRANSITION_MS = 200;
 
 let products = [];
@@ -221,18 +583,36 @@ modal?.addEventListener('click', (event) => {
 async function init() {
   try {
     await loadCatalog();
-    ensureInventoryFromCatalog(products);
+    await prepareInventory();
     renderGrid(products);
     console.log('[init] grid rendered', products.length, 'items');
   } catch (error) {
-    console.error('[init] catalog error:', error);
-    showToast('Не удалось загрузить каталог');
+    console.error('[init] initialization error:', error);
+    showToast('Не получилось загрузить витрину.');
     renderGrid([]);
   }
 
   syncCartWithInventory();
   updateCartCount();
   renderCart();
+}
+
+async function prepareInventory() {
+  const defaults = normalizeInventoryData({}, products);
+  setInventoryState(defaults, { cache: false });
+  try {
+    await fetchInventory();
+  } catch (error) {
+    console.error('[inventory] fetch failed:', error);
+    const cached = readInventoryCache();
+    if (cached) {
+      const snapshot = normalizeInventoryData(cached, products);
+      setInventoryState(snapshot, { cache: false });
+      showToast('Нет связи с сервером. Показаны сохранённые остатки.');
+    } else {
+      showToast('Ошибка соединения. Попробуйте ещё раз.');
+    }
+  }
 }
 
 async function loadCatalog() {
@@ -254,7 +634,7 @@ async function loadCatalog() {
   }
 
   products = loadedItems.map(normalizeProduct).filter((item) => item !== null);
-  window.products = products.map((item) => structuredClone(item));
+  mirrorProducts();
 
   // --- Нормализация товаров: оставить только id1/id2/id3 и удалить все UNT-***
   (function normalizeProducts() {
@@ -310,7 +690,7 @@ async function loadCatalog() {
   })();
 
   products = window.products.map(normalizeProduct).filter((item) => item !== null);
-  window.products = products.map((item) => structuredClone(item));
+  mirrorProducts();
 }
 
 function normalizeProduct(raw) {
@@ -349,45 +729,17 @@ function normalizeProduct(raw) {
   };
 }
 
-function ensureInventoryFromCatalog(items) {
-  const inv = loadInventoryObj();
-  let changed = false;
-
-  (items || []).forEach((product) => {
-    if (!product || !product.id) {
-      return;
-    }
-    if (inv[product.id] == null) {
-      inv[product.id] = Number.isFinite(product.stock) ? Math.max(0, product.stock) : 0;
-      changed = true;
-    }
-  });
-
-  if (changed) {
-    saveInventoryObj(inv);
-  }
-}
-
-function loadInventoryObj() {
-  try {
-    const stored = localStorage.getItem(INVENTORY_STORAGE_KEY);
-    return stored ? JSON.parse(stored) : {};
-  } catch {
-    return {};
-  }
-}
-
-function saveInventoryObj(inv) {
-  localStorage.setItem(INVENTORY_STORAGE_KEY, JSON.stringify(inv || {}));
+function getInventorySnapshot() {
+  return structuredClone(inventoryState);
 }
 
 function getStock(pid) {
   if (!pid) {
     return 0;
   }
-  const inv = loadInventoryObj();
-  if (pid in inv) {
-    return Math.max(0, Number(inv[pid]) || 0);
+  const record = getInventoryRecord(pid);
+  if (record && Number.isFinite(Number(record.stock))) {
+    return Math.max(0, Number(record.stock));
   }
   const product = products.find((item) => item.id === pid);
   if (product) {
@@ -396,15 +748,9 @@ function getStock(pid) {
   return 0;
 }
 
-function setStock(pid, qty) {
-  const inv = loadInventoryObj();
-  inv[pid] = Math.max(0, Number(qty) || 0);
-  saveInventoryObj(inv);
-}
-
 function getRemainingForAdd(pid) {
   const inStock = getStock(pid);
-  const inCart = loadCart().find((item) => item.id === pid)?.qty || 0;
+  const inCart = cart.find((item) => item.id === pid)?.qty || 0;
   return Math.max(0, inStock - inCart);
 }
 
@@ -521,8 +867,9 @@ function renderGrid(items) {
     card.dataset.id = product.id;
     card.setAttribute('data-item-id', product.id);
     if (isOutOfStock) {
-      card.classList.add('out-of-stock');
+      card.classList.add('soldout');
       card.setAttribute('aria-disabled', 'true');
+      card.tabIndex = -1;
     }
 
     const imgEl = document.createElement('img');
@@ -630,7 +977,12 @@ function renderGrid(items) {
     }
     card.appendChild(priceEl);
 
-    const handleOpen = () => openModal(product);
+    const handleOpen = () => {
+      if (getStock(product.id) <= 0) {
+        return;
+      }
+      openModal(product);
+    };
     card.addEventListener('click', handleOpen);
     card.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' || event.key === ' ') {
@@ -642,13 +994,18 @@ function renderGrid(items) {
     grid.appendChild(card);
   });
 
-  applyInventoryToCards(loadInventoryObj());
+  applyInventoryToCards(getInventorySnapshot());
 }
 
-function applyInventoryToCards(stock) {
-  document.querySelectorAll('[data-item-id], [data-id]').forEach((card) => {
+function applyInventoryToCards(snapshot) {
+  const cards = document.querySelectorAll('[data-item-id], [data-id]');
+  cards.forEach((card) => {
     const id = card.getAttribute('data-item-id') || card.getAttribute('data-id');
-    let left = Number(stock?.[id]);
+    if (!id) {
+      return;
+    }
+
+    let left = Number(snapshot?.[id]?.stock);
     if (!Number.isFinite(left)) {
       const productData = products.find((p) => p.id === id);
       if (productData && Number.isFinite(productData.stock)) {
@@ -658,23 +1015,33 @@ function applyInventoryToCards(stock) {
       }
     }
 
+    const isSoldOut = left <= 0;
     const addBtns = card.querySelectorAll('.add-to-cart, .card-add, .modal-add');
     addBtns.forEach((btn) => {
-      if (!btn) return;
-      btn.disabled = left <= 0;
-      btn.setAttribute('aria-disabled', left <= 0 ? 'true' : 'false');
-      if (left <= 0) {
-        if (!btn.dataset._originalText) btn.dataset._originalText = btn.textContent;
-        btn.textContent = 'Нет в наличии';
+      if (!(btn instanceof HTMLElement)) {
+        return;
+      }
+      btn.toggleAttribute('disabled', isSoldOut);
+      btn.setAttribute('aria-disabled', isSoldOut ? 'true' : 'false');
+      if (isSoldOut) {
+        if (!btn.dataset._originalText) {
+          btn.dataset._originalText = btn.textContent ?? '';
+        }
+        if (btn.classList.contains('modal-add') || btn.matches('.add-to-cart, .card-add')) {
+          btn.textContent = 'Нет в наличии';
+        }
       } else if (btn.dataset._originalText) {
         btn.textContent = btn.dataset._originalText;
       }
     });
 
-    if (left <= 0) {
-      card.classList.add('out-of-stock');
+    card.classList.toggle('soldout', isSoldOut);
+    if (isSoldOut) {
+      card.setAttribute('aria-disabled', 'true');
+      card.tabIndex = -1;
     } else {
-      card.classList.remove('out-of-stock');
+      card.removeAttribute('aria-disabled');
+      card.tabIndex = 0;
     }
   });
 }
@@ -1261,7 +1628,7 @@ function getCartTotal(currentCart = cart) {
 }
 
 function formatPrice(value) {
-  return `${Number(value).toLocaleString('ru-RU')} ?`;
+  return `${Number(value).toLocaleString('ru-RU')} RUB`;
 }
 
 function captureFormState() {
@@ -1282,6 +1649,42 @@ function resetFormState() {
   cartFormState = { ...defaultFormState };
 }
 
+async function copyToClipboardSafe(text) {
+  if (typeof text !== 'string' || !text.trim()) {
+    return false;
+  }
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (error) {
+      console.warn('[clipboard] write failed:', error);
+    }
+  }
+  try {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body?.appendChild(textarea);
+    textarea.select();
+    const success = document.execCommand && document.execCommand('copy');
+    textarea.remove();
+    return !!success;
+  } catch (error) {
+    console.warn('[clipboard] fallback failed:', error);
+    return false;
+  }
+}
+
+function openTelegramChat() {
+  try {
+    window.open(ORDER_TELEGRAM_URL, '_blank', 'noopener');
+  } catch (error) {
+    console.warn('[telegram] open failed:', error);
+  }
+}
 function showToast(message) {
   let toast = document.querySelector('.toast');
   if (!toast) {
@@ -1307,33 +1710,30 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 function handleCheckout(currentCart = cart) {
-  try {
-    if (!currentCart.length) {
-      showToast('Корзина пуста');
+  const items = Array.isArray(currentCart) ? currentCart : [];
+  if (!items.length) {
+    showToast('Cart is empty.');
+    return;
+  }
+
+  for (const item of items) {
+    if (!item || !item.id) {
+      continue;
+    }
+    const need = Math.max(1, Number(item.qty) || 1);
+    const available = getStock(item.id);
+    if (!Number.isFinite(available)) {
+      showToast('Unable to verify stock. Please try again.');
       return;
     }
-
-    for (const item of currentCart) {
-      if (!item || !item.id) {
-        continue;
-      }
-      const need = Math.max(1, Number(item.qty) || 1);
-      const have = getStock(item.id);
-      if (!Number.isFinite(have)) {
-        showToast('Не удалось подтвердить наличие. Попробуйте ещё раз.');
-        return;
-      }
-      if (need > have) {
-        showToast(`Недостаточно товара: ${item.id}. Нужно ${need}, осталось ${have}.`);
-        return;
-      }
+    if (need > available) {
+      const name = item.title || item.id;
+      showToast(`Not enough stock for: ${name}`);
+      return;
     }
-
-    submitOrder();
-  } catch (error) {
-    console.error('[checkout] availability error:', error);
-    showToast('Не удалось подтвердить наличие. Попробуйте ещё раз.');
   }
+
+  submitOrder();
 }
 
 async function submitOrder() {
@@ -1343,8 +1743,8 @@ async function submitOrder() {
   }
 
   cart = loadCart();
-  if (!cart || !cart.length) {
-    showToast('Корзина пуста');
+  if (!Array.isArray(cart) || cart.length === 0) {
+    showToast('Cart is empty.');
     return;
   }
 
@@ -1361,7 +1761,7 @@ async function submitOrder() {
   const consentChecked = !!consentInput?.checked;
 
   if (!name || !/\S+@\S+\.\S+/.test(email) || !consentChecked) {
-    showToast('Заполните обязательные поля формы');
+    showToast('Please review your contact details.');
     return;
   }
 
@@ -1369,35 +1769,78 @@ async function submitOrder() {
     telegram = '';
   }
 
+  const cartSnapshot = cart.map((item) => ({
+    id: String(item.id),
+    title: item.title,
+    price: item.price,
+    qty: Math.max(1, Number(item.qty) || 1),
+  }));
+
+  const cartItems = cartSnapshot.map((item) => ({
+    id: String(item.id),
+    title: item.title,
+    qty: item.qty,
+  }));
+
+  orderBtn.disabled = true;
+  orderBtn.dataset.loading = 'true';
+
+  try {
+    await decrementInventoryOrFail(cartItems);
+  } catch (error) {
+    if (error?.code === 'OUT_OF_STOCK') {
+      showToast(error.message || 'Not enough stock.');
+    } else {
+      console.error('[order] inventory error:', error);
+      showToast('Unable to sync stock. Please try again.');
+    }
+    syncCartWithInventory();
+    renderCart();
+    renderGrid(products);
+    orderBtn.disabled = false;
+    orderBtn.removeAttribute('data-loading');
+    return;
+  }
+
+  syncCartWithInventory();
+  renderCart();
+  renderGrid(products);
+
+  const summaryLines = [];
+  summaryLines.push('Заказ NEW GRGY TIMES');
+  summaryLines.push('---');
+  summaryLines.push('Состав корзины:');
+  cartSnapshot.forEach((item, index) => {
+    const sum = item.price * item.qty;
+    summaryLines.push(`${index + 1}) ${item.title} × ${item.qty} — ${item.price.toLocaleString('ru-RU')} ₽ = ${sum.toLocaleString('ru-RU')} ₽`);
+  });
+  summaryLines.push('---');
+  summaryLines.push(`Итого: ${getCartTotal(cartSnapshot).toLocaleString('ru-RU')} ₽`);
+  summaryLines.push('');
+  summaryLines.push('Контакты:');
+  summaryLines.push(`Имя: ${name}`);
+  summaryLines.push(`Email: ${email}`);
+  summaryLines.push(`Telegram: ${telegram || '-'}`);
+  if (comment) {
+    summaryLines.push(`Комментарий: ${comment}`);
+  }
+
+  const summaryText = summaryLines.join('\n');
+
   const formData = new FormData();
   formData.append('access_key', WEB3FORMS_ACCESS_KEY);
   formData.append('subject', 'Заказ NEW GRGY TIMES');
   formData.append('from_name', 'NEW GRGY TIMES Store');
   formData.append('replyto', email);
   formData.append('email', 'grgyone@gmail.com');
+  formData.append('message', summaryText);
 
-  const summaryLines = [];
-  summaryLines.push('Заказ NEW GRGY TIMES');
-  summaryLines.push('---');
-  summaryLines.push('Состав заказа:');
-  cart.forEach((item, index) => {
-    const sum = item.price * item.qty;
-    summaryLines.push(`${index + 1}) ${item.title} ? ${item.qty} — ${item.price.toLocaleString('ru-RU')} ? = ${sum.toLocaleString('ru-RU')} ?`);
-  });
-  summaryLines.push('---');
-  summaryLines.push(`Сумма заказа: ${getCartTotal(cart).toLocaleString('ru-RU')} ?`);
-  summaryLines.push('');
-  summaryLines.push('Контакты:');
-  summaryLines.push(`Имя: ${name}`);
-  summaryLines.push(`Email: ${email}`);
-  summaryLines.push(`Telegram: ${telegram || '—'}`);
-  if (comment) {
-    summaryLines.push(`Комментарий: ${comment}`);
-  }
-
-  formData.append('message', summaryLines.join('\n'));
-
-  orderBtn.disabled = true;
+  const rollbackOnFailure = async () => {
+    await restoreInventoryQuantities(cartItems);
+    syncCartWithInventory();
+    renderCart();
+    renderGrid(products);
+  };
 
   try {
     const response = await fetch('https://api.web3forms.com/submit', {
@@ -1406,11 +1849,12 @@ async function submitOrder() {
     });
     const data = await response.json();
     if (data.success) {
-      const inv = loadInventoryObj();
-      cart.forEach((item) => {
-        inv[item.id] = Math.max(0, (inv[item.id] ?? getStock(item.id)) - item.qty);
-      });
-      saveInventoryObj(inv);
+      try {
+        await copyToClipboardSafe(summaryText);
+      } catch (clipboardError) {
+        console.warn('[clipboard] copy failed:', clipboardError);
+      }
+      openTelegramChat();
 
       saveCart([]);
       cart = [];
@@ -1418,20 +1862,23 @@ async function submitOrder() {
       updateCartCount(cart);
       renderCart();
       renderGrid(products);
-      showToast('Заказ оформлен, вам скоро ответят');
+      showToast('Request sent. We will contact you soon.');
       const form = document.getElementById('cartForm');
       form?.reset();
       resetFormState();
       return;
     }
 
-    showToast('Ошибка отправки заказа. Попробуйте позже.');
     console.error('[order] web3forms error:', data);
+    showToast('Failed to submit. Please try again.');
+    await rollbackOnFailure();
   } catch (error) {
-    console.error('[order] request failed:', error);
-    showToast('Ошибка отправки заказа. Попробуйте позже.');
+    console.error('[order] submit failed:', error);
+    showToast('Failed to submit. Please try again.');
+    await rollbackOnFailure();
   } finally {
     orderBtn.disabled = false;
+    orderBtn.removeAttribute('data-loading');
   }
 }
 
@@ -1525,6 +1972,19 @@ async function submitOrder() {
     }
   }, { passive: true });
 })();
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
