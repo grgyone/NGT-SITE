@@ -6,142 +6,6 @@ if (typeof structuredClone !== 'function') {
   window.structuredClone = (obj) => JSON.parse(JSON.stringify(obj));
 }
 
-// ---- runtime styles to scale images on cards & in modal (no CSS/HTML edits) ----
-(function ensureRuntimeStyles() {
-  const ID = 'ngt-runtime-styles';
-  if (document.getElementById(ID)) return;
-  const css = `
-    /* Карточка товара (главная): картинка всегда вписывается по ширине карточки */
-    .card-img{
-      display:block;
-      width:100%;
-      max-width:100%;
-      height:auto;
-      max-height:360px;
-      object-fit:contain;
-      image-rendering:auto;
-    }
-    /* Модалка: картинка вписывается в окно, не вылезает за край */
-    #modal .modal-image{
-      display:block;
-      max-width:100%;
-      max-height:80vh;
-      width:auto;
-      height:auto;
-      object-fit:contain;
-      margin:0 auto;
-    }
-  `.trim();
-  const style = document.createElement('style');
-  style.id = ID;
-  style.textContent = css;
-  document.head.appendChild(style);
-})();
-// —— runtime styles (без правок HTML/CSS файлов)
-(function ensureRuntimeStylesAvailability(){
-  const ID = 'ngt-runtime-styles-availability-overlay';
-  if (document.getElementById(ID)) return;
-  const css = `
-    .stock-badge { display: none !important; }
-    [data-item-id].soldout {
-      position: relative;
-      filter: grayscale(1) brightness(.8);
-    }
-    [data-item-id].soldout::after {
-      content: "Нет в наличии";
-      position: absolute;
-      inset: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 14px;
-      letter-spacing: .03em;
-      color: #fff;
-      background: rgba(0,0,0,.45);
-      text-transform: none;
-      pointer-events: none;
-    }
-    .modal-image-wrapper {
-      position: relative;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    #modal .modal-slide-btn{
-      position: absolute;
-      top: 50%;
-      transform: translateY(-50%);
-      width: 40px;
-      height: 40px;
-      border: none;
-      border-radius: 999px;
-      background: rgba(0,0,0,.55);
-      color: #fff;
-      font-size: 20px;
-      line-height: 1;
-      cursor: pointer;
-      display: grid;
-      place-items: center;
-      z-index: 5;
-      transition: opacity .2s ease;
-    }
-    #modal .modal-slide-btn:hover{ background: rgba(0,0,0,.7); }
-    #modal .modal-slide-btn.prev{ left: 8px; }
-    #modal .modal-slide-btn.next{ right: 8px; }
-    body.inventory-busy {
-      cursor: progress;
-    }
-    #inventory-spinner {
-      position: fixed;
-      inset: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: rgba(0,0,0,.25);
-      backdrop-filter: blur(2px);
-      pointer-events: none;
-      opacity: 0;
-      transition: opacity .2s ease;
-      z-index: 9999;
-    }
-    body.inventory-busy #inventory-spinner {
-      opacity: 1;
-      pointer-events: auto;
-    }
-    #inventory-spinner .box {
-      padding: 18px 26px;
-      border-radius: 12px;
-      background: rgba(0,0,0,.6);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 10px;
-      box-shadow: 0 8px 24px rgba(0,0,0,.35);
-    }
-    #inventory-spinner .spinner {
-      width: 42px;
-      height: 42px;
-      border-radius: 50%;
-      border: 3px solid rgba(255,255,255,.35);
-      border-top-color: #fff;
-      animation: ngt-spin 1s linear infinite;
-    }
-    #inventory-spinner .label {
-      color: #fff;
-      font-size: 14px;
-      line-height: 1.4;
-      text-align: center;
-    }
-    @keyframes ngt-spin {
-      from { transform: rotate(0deg); }
-      to { transform: rotate(360deg); }
-    }
-  `.trim();
-  const style = document.createElement('style');
-  style.id = ID;
-  style.textContent = css;
-  document.head.appendChild(style);
-})();
 const PRODUCT_MANIFEST = [
   {
     id: 'id1',
@@ -261,12 +125,18 @@ function clearInventoryCache() {
 
 function normalizeInventoryData(raw, referenceList) {
   const safeRaw = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  const fromInventoryKey =
+    safeRaw.inventory && typeof safeRaw.inventory === 'object' && !Array.isArray(safeRaw.inventory)
+      ? safeRaw.inventory
+      : null;
+  const source = fromInventoryKey || safeRaw;
+
   const normalized = {};
-  Object.keys(safeRaw).forEach((key) => {
-    const entry = safeRaw[key];
-    if (entry && typeof entry === 'object') {
+  Object.keys(source).forEach((key) => {
+    const entry = source[key];
+    if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
       const clone = structuredClone(entry);
-      const stockValue = Number(clone.stock);
+      const stockValue = Number(clone.stock ?? clone.qty ?? clone.count ?? clone.value);
       clone.stock = Number.isFinite(stockValue) ? Math.max(0, stockValue) : 0;
       normalized[key] = clone;
     } else {
@@ -351,7 +221,7 @@ async function saveInventory(data, options = {}) {
         'X-Master-Key': JSONBIN.MASTER_KEY,
         'X-Access-Key': JSONBIN.ACCESS_KEY,
       },
-      body: JSON.stringify(data),
+      body: JSON.stringify({ inventory: data }),
       signal: options.signal,
     });
     if (!response.ok) {
@@ -506,18 +376,6 @@ const modalQtyInput = modal?.querySelector('.qty-input') ?? null;
 const modalAddButton = modal?.querySelector('.modal-add') ?? null;
 const modalCloseButton = modal?.querySelector('.modal-close') ?? null;
 
-if (modalImage) {
-  modalImage.loading = 'lazy';
-  modalImage.decoding = 'async';
-  modalImage.style.maxWidth = '100%';
-  modalImage.style.maxHeight = '80vh';
-  modalImage.style.width = 'auto';
-  modalImage.style.height = 'auto';
-  modalImage.style.objectFit = 'contain';
-  modalImage.style.display = 'block';
-  modalImage.style.margin = '0 auto';
-}
-
 const defaultFormState = {
   name: '',
   email: '',
@@ -581,15 +439,23 @@ modal?.addEventListener('click', (event) => {
   }
 });
 async function init() {
+  const isCatalogPage = !!grid;
+
   try {
-    await loadCatalog();
-    await prepareInventory();
-    renderGrid(products);
-    console.log('[init] grid rendered', products.length, 'items');
+    if (isCatalogPage) {
+      await loadCatalog();
+      await prepareInventory();
+      renderGrid(products);
+      console.log('[init] grid rendered', products.length, 'items');
+    } else {
+      await prepareInventory({ fetchRemote: false });
+    }
   } catch (error) {
     console.error('[init] initialization error:', error);
-    showToast('Не получилось загрузить витрину.');
-    renderGrid([]);
+    if (isCatalogPage) {
+      showToast('Не получилось загрузить витрину.');
+      renderGrid([]);
+    }
   }
 
   syncCartWithInventory();
@@ -597,16 +463,28 @@ async function init() {
   renderCart();
 }
 
-async function prepareInventory() {
-  const defaults = normalizeInventoryData({}, products);
+async function prepareInventory(options = {}) {
+  const { fetchRemote = true } = options;
+  const reference = products && products.length ? products : PRODUCT_MANIFEST;
+  const defaults = normalizeInventoryData({}, reference);
   setInventoryState(defaults, { cache: false });
+
+  if (!fetchRemote) {
+    const cached = readInventoryCache();
+    if (cached) {
+      const snapshot = normalizeInventoryData(cached, reference);
+      setInventoryState(snapshot, { cache: false });
+    }
+    return;
+  }
+
   try {
     await fetchInventory();
   } catch (error) {
     console.error('[inventory] fetch failed:', error);
     const cached = readInventoryCache();
     if (cached) {
-      const snapshot = normalizeInventoryData(cached, products);
+      const snapshot = normalizeInventoryData(cached, reference);
       setInventoryState(snapshot, { cache: false });
       showToast('Нет связи с сервером. Показаны сохранённые остатки.');
     } else {
@@ -638,38 +516,10 @@ async function loadCatalog() {
 
   // --- Нормализация товаров: оставить только id1/id2/id3 и удалить все UNT-***
   (function normalizeProducts() {
-    const MANIFEST = [
-      {
-        id: 'id1',
-        title: 'NEW GRGY TIMES test',
-        description: 'NEW GRGY TIMES test',
-        price: '1000',
-        stock: 5,
-        images: ['./items/id1/id1-1.png', './items/id1/id1-2.png'],
-      },
-      {
-        id: 'id2',
-        title: 'NEW GRGY TIMES test',
-        description: 'NEW GRGY TIMES test',
-        price: '2000',
-        stock: 5,
-        images: ['./items/id2/id2-1.png', './items/id2/id2-2.png', './items/id2/id2-3.png'],
-      },
-      {
-        id: 'id3',
-        title: 'NEW GRGY TIMES test',
-        description: 'NEW GRGY TIMES test',
-        price: '3000',
-        stock: 5,
-        images: ['./items/id3/id3-1.png', './items/id3/id3-2.png'],
-      },
-    ];
-
-    const ALLOWED = new Set(MANIFEST.map((p) => String(p.id)));
-    const isUNT = (t) => typeof t === 'string' && /Артикул:\s*UNT-\d+/i.test(t);
+    const isUNT = (t) => typeof t === 'string' && /\bUNT-\d+/i.test(t);
 
     if (!Array.isArray(window.products)) {
-      window.products = MANIFEST.slice();
+      window.products = PRODUCT_MANIFEST.map((item) => structuredClone(item));
       return;
     }
 
@@ -678,13 +528,14 @@ async function loadCatalog() {
       const id = String(p.id || '');
       const title = p.title || '';
       if (isUNT(title)) return false;
-      return ALLOWED.has(id);
+      return ALLOWED_IDS.has(id);
     });
 
     const have = new Set(window.products.map((p) => String(p.id)));
-    MANIFEST.forEach((p) => {
-      if (!have.has(String(p.id))) {
-        window.products.push(p);
+    PRODUCT_MANIFEST.forEach((p) => {
+      const id = String(p.id);
+      if (!have.has(id)) {
+        window.products.push(structuredClone(p));
       }
     });
   })();
@@ -878,11 +729,6 @@ function renderGrid(items) {
     imgEl.alt = product.title || '';
     imgEl.loading = 'lazy';
     imgEl.decoding = 'async';
-    imgEl.style.width = '100%';
-    imgEl.style.maxWidth = '100%';
-    imgEl.style.height = 'auto';
-    imgEl.style.maxHeight = '360px';
-    imgEl.style.objectFit = 'contain';
     card.prepend(imgEl);
 
     if (images.length > 1) {
@@ -1106,10 +952,6 @@ function openModal(product) {
     if (!wrapper) {
       wrapper = document.createElement('div');
       wrapper.className = 'modal-image-wrapper';
-      wrapper.style.position = 'relative';
-      wrapper.style.display = 'flex';
-      wrapper.style.alignItems = 'center';
-      wrapper.style.justifyContent = 'center';
       const parent = modalImage?.parentElement || content;
       if (parent && modalImage) {
         parent.insertBefore(wrapper, modalImage);
@@ -1280,14 +1122,16 @@ function renderCart() {
             <p class="title">${safeTitle}</p>
             <p class="price">${formatPrice(item.price)}</p>
             <div class="controls">
-              <button type="button" data-action="dec" aria-label="Уменьшить количество товара ${safeTitle}">?</button>
-              <input type="number" data-role="qty" min="1" value="${item.qty}" aria-label="Количество товара ${safeTitle}">
-              <button type="button" data-action="inc" aria-label="Увеличить количество товара ${safeTitle}">+</button>
-            </div>
+  <button type="button" data-action="dec" aria-label="Уменьшить количество товара ${safeTitle}">&minus;</button>
+  <input type="number" data-role="qty" min="1" value="${item.qty}" aria-label="Количество товара ${safeTitle}">
+  <button type="button" data-action="inc" aria-label="Увеличить количество товара ${safeTitle}">&plus;</button>
+</div>
           </div>
           <div class="cart-item-total">
-            <span class="line-total">${lineTotal}</span>
-            <button type="button" data-action="remove" aria-label="Удалить товар ${safeTitle}">?</button>
+  <span class="line-total">${lineTotal}</span>
+  <!-- удалили кнопку отсюда -->
+</div>
+<button type="button" class="remove-btn" data-action="remove" aria-label="Удалить товар ${safeTitle}">Удалить</button>
           </div>
         </article>`;
     })
@@ -1328,9 +1172,9 @@ function renderCart() {
         </label>
       </div>
     </div>
-    <div class="cart-actions">
-      <button type="button" id="orderBtn" data-action="checkout" disabled>Оформить заказ</button>
-    </div>
+   <div class="cart-actions">
+  <button type="button" id="orderBtn" data-action="checkout" disabled>Оформить заказ</button>
+</div>
   `;
 
   cart.forEach((item) => {
@@ -1891,14 +1735,6 @@ async function submitOrder() {
   if (!img) return;
   img.loading = 'lazy';
   img.decoding = 'async';
-  img.style.maxWidth = '100%';
-  img.style.maxHeight = '80vh';
-  img.style.width = 'auto';
-  img.style.height = 'auto';
-  img.style.objectFit = 'contain';
-  img.style.display = 'block';
-  img.style.margin = '0 auto';
-
   const state = { list: [], idx: 0 };
 
   function syncDataset() {
@@ -1972,6 +1808,8 @@ async function submitOrder() {
     }
   }, { passive: true });
 })();
+
+
 
 
 
