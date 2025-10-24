@@ -1,4 +1,6 @@
 // Отключение автосмены изображений на главной
+const NGT_DISABLE_CARD_AUTOPLAY = true;
+
 // --- polyfill: structuredClone (на случай старых браузеров)
 if (typeof structuredClone !== 'function') {
   window.structuredClone = (obj) => JSON.parse(JSON.stringify(obj));
@@ -687,341 +689,6 @@ function toggleCartPopup() {
     showCartPopup();
   }
 }
-const GALLERY_SWIPE_THRESHOLD_PX = 30;
-const galleryStateMap = new WeakMap();
-
-function sanitizeGallerySources(list) {
-  if (!Array.isArray(list)) {
-    return [];
-  }
-  const seen = new Set();
-  const sanitized = [];
-  list.forEach((item) => {
-    if (typeof item !== 'string') {
-      return;
-    }
-    const trimmed = item.trim();
-    if (!trimmed || seen.has(trimmed)) {
-      return;
-    }
-    sanitized.push(trimmed);
-    seen.add(trimmed);
-  });
-  return sanitized;
-}
-
-function buildGalleryAlt(title, index, total) {
-  const baseTitle = typeof title === 'string' && title.trim().length ? title.trim() : 'Изображение';
-  if (total > 1) {
-    return `${baseTitle} — изображение ${index + 1} из ${total}`;
-  }
-  return baseTitle;
-}
-
-function buildGalleryAriaLabel(title, index, total) {
-  return buildGalleryAlt(title, index, total);
-}
-
-function createGalleryButton(className, label, pathData) {
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = className;
-  button.setAttribute('aria-label', label);
-
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('aria-hidden', 'true');
-  svg.setAttribute('focusable', 'false');
-
-  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  path.setAttribute('d', pathData);
-  path.setAttribute('fill', 'none');
-  path.setAttribute('stroke', 'currentColor');
-  path.setAttribute('stroke-width', '2');
-  path.setAttribute('stroke-linecap', 'round');
-  path.setAttribute('stroke-linejoin', 'round');
-
-  svg.appendChild(path);
-  button.appendChild(svg);
-
-  return button;
-}
-
-function createProductGallery(product, sources, fallbackSrc) {
-  const gallery = document.createElement('div');
-  gallery.className = 'product-gallery';
-  gallery.tabIndex = 0;
-
-  const title = product?.title || '';
-  if (title) {
-    gallery.dataset.title = title;
-  }
-
-  const sanitizedSources = sanitizeGallerySources(Array.isArray(sources) ? sources : []);
-  const fallback = typeof fallbackSrc === 'string' ? fallbackSrc.trim() : '';
-  if (fallback) {
-    const existingIndex = sanitizedSources.indexOf(fallback);
-    if (existingIndex > 0) {
-      sanitizedSources.splice(existingIndex, 1);
-    }
-    if (existingIndex !== 0) {
-      sanitizedSources.unshift(fallback);
-    }
-  }
-  if (!sanitizedSources.length) {
-    sanitizedSources.push(DEFAULT_IMAGE);
-  }
-
-  try {
-    gallery.dataset.images = JSON.stringify(sanitizedSources);
-  } catch {
-    try {
-      gallery.dataset.images = JSON.stringify([sanitizedSources[0]]);
-    } catch {
-      gallery.dataset.images = '';
-    }
-  }
-
-  const prevBtn = createGalleryButton('gallery-prev', 'Предыдущая', 'M14.5 6l-5 6 5 6');
-  const nextBtn = createGalleryButton('gallery-next', 'Следующая', 'M9.5 6l5 6-5 6');
-
-  const mainWrapper = document.createElement('div');
-  mainWrapper.className = 'product-gallery__main';
-  mainWrapper.setAttribute('role', 'img');
-  mainWrapper.setAttribute('aria-live', 'polite');
-
-  const imgEl = document.createElement('img');
-  imgEl.className = 'product-gallery__image';
-  const initialSrc = sanitizedSources[0] || DEFAULT_IMAGE;
-  imgEl.src = initialSrc;
-  imgEl.alt = buildGalleryAlt(title, 0, sanitizedSources.length);
-  imgEl.loading = 'lazy';
-  imgEl.decoding = 'async';
-  imgEl.dataset.initialSrc = initialSrc;
-
-  mainWrapper.appendChild(imgEl);
-  gallery.appendChild(prevBtn);
-  gallery.appendChild(mainWrapper);
-  gallery.appendChild(nextBtn);
-
-  return gallery;
-}
-
-function setupProductGallery(root) {
-  if (!(root instanceof HTMLElement) || galleryStateMap.has(root)) {
-    return;
-  }
-
-  const prevBtn = root.querySelector('.gallery-prev');
-  const nextBtn = root.querySelector('.gallery-next');
-  const mainWrapper = root.querySelector('.product-gallery__main');
-  const mainImg = mainWrapper?.querySelector('img');
-
-  if (!mainWrapper || !mainImg) {
-    return;
-  }
-
-  if (!root.hasAttribute('tabindex')) {
-    root.tabIndex = 0;
-  }
-  if (!mainWrapper.hasAttribute('role')) {
-    mainWrapper.setAttribute('role', 'img');
-  }
-  mainWrapper.setAttribute('aria-live', 'polite');
-
-  const parseImages = () => {
-    const attr = root.getAttribute('data-images');
-    let parsed = [];
-    if (attr) {
-      try {
-        const arr = JSON.parse(attr);
-        if (Array.isArray(arr)) {
-          parsed = arr;
-        }
-      } catch {
-        parsed = [];
-      }
-    }
-    parsed = sanitizeGallerySources(parsed);
-
-    const fallback = mainImg.dataset.initialSrc || mainImg.getAttribute('src') || '';
-    const trimmedFallback = typeof fallback === 'string' ? fallback.trim() : '';
-    if (trimmedFallback) {
-      const existingIndex = parsed.indexOf(trimmedFallback);
-      if (existingIndex > 0) {
-        parsed.splice(existingIndex, 1);
-      }
-      if (existingIndex !== 0) {
-        parsed.unshift(trimmedFallback);
-      }
-    }
-
-    if (!parsed.length) {
-      parsed.push(DEFAULT_IMAGE);
-    }
-    return parsed;
-  };
-
-  const state = {
-    images: parseImages(),
-    index: 0,
-    title: root.dataset.title || mainImg.alt || '',
-    root,
-    mainWrapper,
-    mainImg,
-    prevBtn,
-    nextBtn,
-  };
-
-  const updateButtons = () => {
-    const single = state.images.length <= 1;
-    [state.prevBtn, state.nextBtn].forEach((btn) => {
-      if (!(btn instanceof HTMLButtonElement)) {
-        return;
-      }
-      btn.disabled = single;
-      btn.hidden = single;
-    });
-  };
-
-  const render = () => {
-    const total = state.images.length || 1;
-    const current = state.images[state.index] || DEFAULT_IMAGE;
-    if (mainImg.src !== current) {
-      mainImg.src = current;
-    }
-    mainImg.alt = buildGalleryAlt(state.title, state.index, total);
-    mainWrapper.setAttribute('aria-label', buildGalleryAriaLabel(state.title, state.index, total));
-    mainImg.dataset.index = String(state.index);
-    state.root.dataset.index = String(state.index);
-    updateButtons();
-  };
-
-  const goTo = (nextIndex) => {
-    if (!state.images.length) {
-      return;
-    }
-    const normalized = ((nextIndex % state.images.length) + state.images.length) % state.images.length;
-    state.index = normalized;
-    render();
-  };
-
-  const handlePrev = () => goTo(state.index - 1);
-  const handleNext = () => goTo(state.index + 1);
-
-  const keydownHandler = (event) => {
-    if (event.key === 'ArrowLeft') {
-      event.preventDefault();
-      handlePrev();
-    } else if (event.key === 'ArrowRight') {
-      event.preventDefault();
-      handleNext();
-    }
-  };
-
-  root.addEventListener('keydown', keydownHandler);
-
-  const stopPropagation = (event) => event.stopPropagation();
-  prevBtn?.addEventListener('pointerdown', stopPropagation);
-  nextBtn?.addEventListener('pointerdown', stopPropagation);
-
-  prevBtn?.addEventListener('click', (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    handlePrev();
-  });
-  nextBtn?.addEventListener('click', (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    handleNext();
-  });
-
-  let pointerId = null;
-  let startX = 0;
-
-  const resetPointer = () => {
-    if (pointerId != null && mainWrapper.hasPointerCapture?.(pointerId)) {
-      try {
-        mainWrapper.releasePointerCapture(pointerId);
-      } catch {
-        // ignore
-      }
-    }
-    pointerId = null;
-    startX = 0;
-  };
-
-  mainWrapper.addEventListener('pointerdown', (event) => {
-    if (!event.isPrimary) {
-      return;
-    }
-    pointerId = event.pointerId;
-    startX = event.clientX;
-    if (mainWrapper.setPointerCapture) {
-      try {
-        mainWrapper.setPointerCapture(pointerId);
-      } catch {
-        // ignore
-      }
-    }
-  });
-
-  const handlePointerEnd = (event) => {
-    if (pointerId == null || event.pointerId !== pointerId) {
-      return;
-    }
-    const deltaX = event.clientX - startX;
-    resetPointer();
-    if (Math.abs(deltaX) >= GALLERY_SWIPE_THRESHOLD_PX) {
-      if (deltaX < 0) {
-        handleNext();
-      } else {
-        handlePrev();
-      }
-    }
-  };
-
-  mainWrapper.addEventListener('pointerup', (event) => {
-    handlePointerEnd(event);
-  });
-
-  mainWrapper.addEventListener('pointercancel', resetPointer);
-
-  root.addEventListener('focus', () => {
-    root.classList.add('product-gallery--focused');
-  });
-  root.addEventListener(
-    'blur',
-    () => {
-      root.classList.remove('product-gallery--focused');
-    },
-    true,
-  );
-
-  render();
-  galleryStateMap.set(root, {
-    getImages: () => state.images.slice(),
-    goTo,
-    next: handleNext,
-    prev: handlePrev,
-  });
-}
-
-function initProductGalleries(scope = document) {
-  const context =
-    scope instanceof Element || scope instanceof DocumentFragment ? scope : document;
-  const galleries = context.querySelectorAll
-    ? context.querySelectorAll('.product-gallery')
-    : document.querySelectorAll('.product-gallery');
-  galleries.forEach((gallery) => {
-    setupProductGallery(gallery);
-  });
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-  initProductGalleries();
-});
-
 function renderGrid(items) {
   if (!grid) {
     return;
@@ -1056,9 +723,81 @@ function renderGrid(items) {
       card.tabIndex = -1;
     }
 
-    const gallery = createProductGallery(product, images, mainSrc);
-    card.prepend(gallery);
-    setupProductGallery(gallery);
+    const imgEl = document.createElement('img');
+    imgEl.className = 'card-img';
+    imgEl.src = mainSrc;
+    imgEl.alt = product.title || '';
+    imgEl.loading = 'lazy';
+    imgEl.decoding = 'async';
+    card.prepend(imgEl);
+
+    if (images.length > 1) {
+      card.dataset.images = JSON.stringify(images);
+
+      // Раньше здесь запускалась автокарусель карточки.
+      // Теперь ничего не запускаем — оставляем только первую картинку.
+      if (!NGT_DISABLE_CARD_AUTOPLAY) {
+        // (если когда-то нужно будет снова включить — вернуть старый код автокарусели сюда)
+        (function initCardCarousel(cardNode) {
+          let imgs;
+          try {
+            imgs = JSON.parse(cardNode.dataset.images);
+          } catch {
+            imgs = null;
+          }
+          if (!Array.isArray(imgs) || imgs.length < 2) return;
+
+          const img = cardNode.querySelector('.card-img');
+          if (!img) return;
+
+          let idx = 0;
+          let paused = false;
+          let timer = null;
+
+          const next = () => {
+            if (!paused) {
+              idx = (idx + 1) % imgs.length;
+              img.src = imgs[idx];
+            }
+          };
+          const start = () => {
+            if (!timer) timer = setInterval(next, 3000);
+          };
+          const stop = () => {
+            if (timer) {
+              clearInterval(timer);
+              timer = null;
+            }
+          };
+
+          cardNode.addEventListener('mouseenter', () => {
+            paused = true;
+          });
+          cardNode.addEventListener('mouseleave', () => {
+            paused = false;
+          });
+
+          if ('IntersectionObserver' in window) {
+            const io = new IntersectionObserver((entries) => {
+              entries.forEach((entry) => {
+                paused = !entry.isIntersecting;
+                if (!paused && !timer) {
+                  start();
+                }
+                if (paused && timer) {
+                  stop();
+                }
+              });
+            });
+            io.observe(cardNode);
+          }
+
+          start();
+        })(card);
+      }
+    } else {
+      card.removeAttribute('data-images');
+    }
 
     const titleEl = document.createElement('h2');
     titleEl.className = 'product-title title';
