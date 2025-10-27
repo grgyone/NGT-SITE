@@ -39,6 +39,7 @@ const WEB3FORMS_ACCESS_KEY = '97052283-3d2d-46b2-86ca-c21f81998914';
 const CART_STORAGE_KEY = 'cart';
 const INVENTORY_CACHE_KEY = 'inventory_cache_v1';
 const ORDER_TELEGRAM_URL = 'https://t.me/grgyone';
+const SOLD_OUT_PRICE_LABEL = '\u041d\u0435\u0442 \u0432 \u043d\u0430\u043b\u0438\u0447\u0438\u0438';
 
 const JSONBIN = {
   BIN_ID: '68f60e4ad0ea881f40ae1bd9',
@@ -605,6 +606,30 @@ function getRemainingForAdd(pid) {
   return Math.max(0, inStock - inCart);
 }
 
+function updatePriceElement(target, value, forceHide = false) {
+  if (!(target instanceof HTMLElement)) {
+    return;
+  }
+  target.classList.remove('product-price--soldout');
+  const numeric = Number(value);
+  const shouldHide = forceHide || !Number.isFinite(numeric);
+  if (shouldHide) {
+    target.textContent = '';
+  } else {
+    target.textContent = formatPrice(numeric);
+  }
+  target.toggleAttribute('hidden', shouldHide);
+}
+
+function setSoldOutPrice(target) {
+  if (!(target instanceof HTMLElement)) {
+    return;
+  }
+  target.textContent = SOLD_OUT_PRICE_LABEL;
+  target.classList.add('product-price--soldout');
+  target.removeAttribute('hidden');
+}
+
 function loadCart() {
   try {
     const data = JSON.parse(localStorage.getItem(CART_STORAGE_KEY) || '[]');
@@ -719,8 +744,6 @@ function renderGrid(items) {
     card.setAttribute('data-item-id', product.id);
     if (isOutOfStock) {
       card.classList.add('soldout');
-      card.setAttribute('aria-disabled', 'true');
-      card.tabIndex = -1;
     }
 
     const imgEl = document.createElement('img');
@@ -815,7 +838,11 @@ function renderGrid(items) {
 
     const priceEl = document.createElement('p');
     priceEl.className = 'product-price price';
-    priceEl.textContent = formatPrice(product.price);
+    if (isOutOfStock) {
+      setSoldOutPrice(priceEl);
+    } else {
+      updatePriceElement(priceEl, product.price);
+    }
 
     card.appendChild(titleEl);
     if (skuEl) {
@@ -824,9 +851,6 @@ function renderGrid(items) {
     card.appendChild(priceEl);
 
     const handleOpen = () => {
-      if (getStock(product.id) <= 0) {
-        return;
-      }
       openModal(product);
     };
     card.addEventListener('click', handleOpen);
@@ -851,9 +875,10 @@ function applyInventoryToCards(snapshot) {
       return;
     }
 
+    const productData = products.find((p) => String(p.id) === id);
+
     let left = Number(snapshot?.[id]?.stock);
     if (!Number.isFinite(left)) {
-      const productData = products.find((p) => p.id === id);
       if (productData && Number.isFinite(productData.stock)) {
         left = Number(productData.stock);
       } else {
@@ -862,6 +887,21 @@ function applyInventoryToCards(snapshot) {
     }
 
     const isSoldOut = left <= 0;
+    card.classList.toggle('soldout', isSoldOut);
+
+    const priceEl = card.querySelector('.product-price');
+    if (priceEl instanceof HTMLElement) {
+      let priceValue = snapshot?.[id]?.price;
+      if (priceValue == null && productData) {
+        priceValue = productData.price;
+      }
+      if (isSoldOut) {
+        setSoldOutPrice(priceEl);
+      } else {
+        const shouldHidePrice = priceValue == null;
+        updatePriceElement(priceEl, priceValue, shouldHidePrice);
+      }
+    }
     const addBtns = card.querySelectorAll('.add-to-cart, .card-add, .modal-add');
     addBtns.forEach((btn) => {
       if (!(btn instanceof HTMLElement)) {
@@ -873,22 +913,23 @@ function applyInventoryToCards(snapshot) {
         if (!btn.dataset._originalText) {
           btn.dataset._originalText = btn.textContent ?? '';
         }
-        if (btn.classList.contains('modal-add') || btn.matches('.add-to-cart, .card-add')) {
+                const isModalButton = btn.classList.contains('modal-add');
+        if (isModalButton) {
+          btn.toggleAttribute('hidden', true);
+          btn.setAttribute('aria-hidden', 'true');
+        }
+        if (!isModalButton && btn.matches('.add-to-cart, .card-add')) {
           btn.textContent = 'Нет в наличии';
         }
       } else if (btn.dataset._originalText) {
         btn.textContent = btn.dataset._originalText;
+              btn.toggleAttribute('hidden', false);
+        btn.removeAttribute('aria-hidden');
       }
     });
 
-    card.classList.toggle('soldout', isSoldOut);
-    if (isSoldOut) {
-      card.setAttribute('aria-disabled', 'true');
-      card.tabIndex = -1;
-    } else {
-      card.removeAttribute('aria-disabled');
-      card.tabIndex = 0;
-    }
+    card.removeAttribute('aria-disabled');
+    card.tabIndex = 0;
   });
 }
 
@@ -923,8 +964,10 @@ function openModal(product) {
     }
     modalDescription.textContent = parts.join(' · ');
   }
+    const stockLeft = getStock(product.id);
   if (modalPrice) {
-    modalPrice.textContent = formatPrice(product.price);
+  const hidePrice = (Number.isFinite(stockLeft) ? stockLeft <= 0 : false) || !Number.isFinite(Number(product.price));
+    updatePriceElement(modalPrice, product.price, hidePrice);
   }
 
   (function enhanceModal(currentProduct) {
@@ -1057,17 +1100,23 @@ function openModal(product) {
   if (modalAddButton instanceof HTMLButtonElement) {
     modalAddButton.disabled = !canAddToCart;
     modalAddButton.classList.toggle('disabled', !canAddToCart);
-    modalAddButton.onclick = (event) => {
-      event.preventDefault();
-      if (!canAddToCart || !(modalQtyInput instanceof HTMLInputElement)) {
-        return;
-      }
-      const qty = clamp(modalQtyInput.value);
-      addToCart(product, qty);
-      updateCartCount();
-      closeModal();
-      showToast('Товар добавлен в корзину');
-    };
+        modalAddButton.toggleAttribute('hidden', !canAddToCart);
+    modalAddButton.setAttribute('aria-hidden', !canAddToCart ? 'true' : 'false');
+    if (canAddToCart) {
+      modalAddButton.onclick = (event) => {
+        event.preventDefault();
+        if (!(modalQtyInput instanceof HTMLInputElement)) {
+          return;
+        }
+        const qty = clamp(modalQtyInput.value);
+        addToCart(product, qty);
+        updateCartCount();
+        closeModal();
+        showToast('Товар добавлен в корзину');
+      };
+    } else {
+      modalAddButton.onclick = null;
+    }
   }
 
   if (modalEscHandler) {
@@ -1808,10 +1857,6 @@ async function submitOrder() {
     }
   }, { passive: true });
 })();
-
-
-
-
 
 
 

@@ -141,26 +141,14 @@ a { color: inherit; text-decoration: none; }
 
 [data-item-id].soldout {
   position: relative;
-  filter: grayscale(1) brightness(.8);
 }
-[data-item-id].soldout::after {
-  content: "Нет в наличии";
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-  letter-spacing: .03em;
-  color: #fff;
-  background: rgba(0,0,0,.45);
-  text-transform: none;
-  pointer-events: none;
+[data-item-id].soldout .card-img {
+  filter: grayscale(1) brightness(.75);
 }
-
 .product-title { margin: 0; font-size: 16px; font-weight: 600; }
 .product-sku    { margin: 0; color: var(--color-text-muted); font-size: 14px; }
 .product-price  { margin: 0; color: var(--color-text-muted); font-size: 15px; }
+.product-price--soldout { color: rgba(17, 17, 17, 0.45); }
 
 /* --- Cart popup --- */
 .cart-popup.hidden { display: none; }
@@ -553,3 +541,4 @@ body.inventory-busy #inventory-spinner {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
+
