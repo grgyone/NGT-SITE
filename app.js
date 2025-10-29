@@ -28,7 +28,7 @@ const PRODUCT_MANIFEST = [
     title: 'Cutie T-shirt',
     description: 'Футболка с вышивкой персонажа Kloud. Мягкий хлопок белоснежной футболки UNIQLO служит фоном для детализированной вышивки. Оригинальный выпуск 2022 года.',
     price: '3000',
-    stock: 10,
+    stock: 0,
     images: ['./items/id3/id3-1.png', './items/id3/id3-2.png'],
   },
 ];
@@ -1858,6 +1858,83 @@ async function submitOrder() {
   }, { passive: true });
 })();
 
+// ==== YooKassa: сбор данных и редирект на оплату ====
+
+async function pay() {
+  try {
+    // 1) Собираем корзину из твоего localStorage/стейта
+    const cart = getCartSafe(); // см. хелпер ниже
+
+    // 2) Контакты/доставка — подстрой под свои поля формы!
+    const customer = {
+      email: document.querySelector('#order-email')?.value || '',
+      phone: document.querySelector('#order-phone')?.value || '',
+      name:  document.querySelector('#order-name')?.value  || ''
+    };
+    const delivery = {
+      type:    document.querySelector('input[name="delivery"]:checked')?.value || 'pickup',
+      address: document.querySelector('#order-address')?.value || '',
+      comment: document.querySelector('#order-comment')?.value || ''
+    };
+
+    // Мини-валидация
+    if (!cart.length)   return toast && toast('Корзина пуста');
+    if (!customer.email && !customer.phone) return toast && toast('Укажите email или телефон');
+
+    // 3) Запрос к серверу на создание платежа
+    togglePayLoading(true);
+    const resp = await fetch('/api/create-payment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cart, customer, delivery })
+    });
+
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok || !data?.confirmation_url) {
+      console.error('create-payment error:', data);
+      togglePayLoading(false);
+      return alert('Ошибка оплаты: ' + (data?.description || resp.status));
+    }
+
+    // 4) Редирект на страницу подтверждения ЮKassa
+    window.location.href = data.confirmation_url;
+  } catch (e) {
+    console.error(e);
+    togglePayLoading(false);
+    alert('Непредвиденная ошибка при оплате');
+  }
+}
+
+// Хелпер: чтение корзины (адаптируй под свою структуру)
+function getCartSafe() {
+  try {
+    const raw = localStorage.getItem('cart');
+    const arr = raw ? JSON.parse(raw) : [];
+    // Оставляем только безопасные поля
+    return (arr || []).map(({ id, qty }) => ({ id, qty: Number(qty) || 1 }));
+  } catch { return []; }
+}
+
+// Хелпер: показать спиннер на кнопке (если нужен)
+function togglePayLoading(on) {
+  const btn = document.querySelector('#pay-btn');
+  if (!btn) return;
+  btn.disabled = !!on;
+  btn.dataset.label ??= btn.textContent;
+  btn.textContent = on ? 'Переход к оплате…' : btn.dataset.label;
+}
+
+// ==== Привязка к кнопке оформления ====
+// Найди кнопку “Оформить заказ”. Если у тебя другой id — замени на свой.
+const payBtn = document.querySelector('#pay-btn') || document.querySelector('.checkout-pay-btn');
+if (payBtn && !payBtn.dataset.ykBound) {
+  payBtn.dataset.ykBound = '1';
+  payBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    // Если раньше тут открывался Telegram — отключи/удали тот код
+    pay();
+  });
+}
 
 
 
