@@ -1,26 +1,17 @@
-import crypto from 'node:crypto';
+const crypto = require('crypto');
+const fetch = global.fetch || require('node-fetch');
 
-export default async function handler(req, res) {
+module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).end('Method Not Allowed');
 
   try {
-    const {
-      cart = [],        // [{id,title,price,qty,vat_code?}]
-      customer = {},    // {email, phone, name}
-      delivery = {},    // {type,address, comment}
-    } = req.body || {};
+    const { cart = [], customer = {}, delivery = {} } = req.body || {};
+    const { items, total } = await priceAndValidate(cart);
 
-    // 1) Серверная валидация и пересчёт стоимости (доверяем только серверу)
-    const { items, total } = await priceAndValidate(cart); // самописная функция ниже
-
-    // 2) Подготовка тела платежа
     const payment = {
       amount: { value: total.toFixed(2), currency: 'RUB' },
       capture: true,
-      confirmation: {
-        type: 'redirect',
-        return_url: process.env.BASE_URL + '/thankyou.html'
-      },
+      confirmation: { type: 'redirect', return_url: process.env.BASE_URL + '/thankyou.html' },
       description: `NGT Order ${Date.now()}`,
       receipt: {
         customer: {
@@ -32,28 +23,22 @@ export default async function handler(req, res) {
           description: it.title,
           quantity: it.qty,
           amount: { value: it.lineTotal.toFixed(2), currency: 'RUB' },
-          vat_code: it.vat_code ?? 1,           // проверь код НДС под себя
+          vat_code: it.vat_code ?? 1,
           payment_mode: 'full_payment',
           payment_subject: 'commodity'
         }))
       },
+      // В metadata — только плоские строки/числа
       metadata: {
-      delivery_type: delivery.type || '',
-      delivery_address: delivery.address || '',
-       delivery_comment: delivery.comment || '',
-       items: items
-       .map(({ id, title, qty, price }) => `${id}:${title}×${qty}=${price}`)
-       .join('; ')
+        delivery_type: delivery.type || '',
+        delivery_address: delivery.address || '',
+        delivery_comment: delivery.comment || '',
+        items: items.map(({ id, title, qty, price }) => `${id}:${title}×${qty}=${price}`).join('; ')
       }
     };
 
-    // 3) Idempotence-Key
     const idemKey = crypto.randomUUID();
-
-    // 4) Запрос к YooKassa
-    const auth = Buffer
-      .from(`${process.env.YOOKASSA_SHOP_ID}:${process.env.YOOKASSA_SECRET_KEY}`)
-      .toString('base64');
+    const auth = Buffer.from(`${process.env.YOOKASSA_SHOP_ID}:${process.env.YOOKASSA_SECRET_KEY}`).toString('base64');
 
     const resp = await fetch('https://api.yookassa.ru/v3/payments', {
       method: 'POST',
@@ -71,10 +56,6 @@ export default async function handler(req, res) {
       return res.status(resp.status).json(data);
     }
 
-    // 5) Сохрани черновик заказа (по необходимости)
-    // await saveDraft({ paymentId: data.id, items, total, customer, delivery, idemKey });
-
-    // 6) Верни ссылку для редиректа
     return res.status(200).json({
       payment_id: data.id,
       confirmation_url: data?.confirmation?.confirmation_url
@@ -83,18 +64,15 @@ export default async function handler(req, res) {
     console.error(e);
     return res.status(500).json({ error: 'internal_error' });
   }
-}
+};
 
-// ===== пример серверного пересчёта =====
 async function priceAndValidate(cart) {
-  // 1) Подтянуть актуальные цены/остатки (JSONBin/БД)
-  const inventory = await getInventory(); // сам реализуешь
-  // 2) Свести позиции
+  const inventory = await getInventory();
   const items = cart.map(ci => {
     const stock = inventory[ci.id];
     if (!stock) throw new Error(`Item not found: ${ci.id}`);
     if (ci.qty < 1 || ci.qty > stock.qty) throw new Error(`Qty invalid for ${ci.id}`);
-    const price = Number(stock.price); // цена берётся с сервера
+    const price = Number(stock.price);
     const lineTotal = price * ci.qty;
     return { id: ci.id, title: stock.title, qty: ci.qty, price, lineTotal, vat_code: stock.vat_code };
   });
@@ -103,9 +81,6 @@ async function priceAndValidate(cart) {
 }
 
 async function getInventory() {
-  // Вариант с JSONBin (read-only на фронте; write — только здесь)
-  // Используй секрет в заголовке, не светя его на фронт.
-  // Заглушка:
   return {
     'sku-001': { title: 'GRGY Cap', price: 1990, qty: 5, vat_code: 1 },
     'sku-002': { title: 'Print A3', price: 1490, qty: 12, vat_code: 1 }
