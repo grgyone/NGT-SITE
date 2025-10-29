@@ -1,3 +1,4 @@
+// api/create-payment.js
 const crypto = require('crypto');
 const fetch = global.fetch || require('node-fetch');
 
@@ -28,7 +29,7 @@ module.exports = async (req, res) => {
           payment_subject: 'commodity'
         }))
       },
-      // В metadata — только плоские строки/числа
+      // В metadata — только плоские строки/числа, без вложенных объектов!
       metadata: {
         delivery_type: delivery.type || '',
         delivery_address: delivery.address || '',
@@ -66,6 +67,7 @@ module.exports = async (req, res) => {
   }
 };
 
+// ===== helpers =====
 async function priceAndValidate(cart) {
   const inventory = await getInventory();
   const items = cart.map(ci => {
