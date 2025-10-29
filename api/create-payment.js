@@ -2,13 +2,20 @@
 'use strict';
 
 const crypto = require('crypto');
-
-// В Vercel Node 18+ fetch доступен глобально — лишних пакетов не нужно.
 const fetchFn = globalThis.fetch;
 
-/**
- * Serverless handler (Vercel)
- */
+/** --- helpers --- */
+function getEnv(name) {
+  const v = (process.env[name] || '').trim();
+  return v;
+}
+
+function badCreds(res, shopId, secret) {
+  console.error('Bad YooKassa creds: shopId="%s", secretLen=%d', shopId, (secret || '').length);
+  return res.status(500).json({ error: 'yookassa_env_invalid' });
+}
+
+/** --- handler --- */
 module.exports = async (req, res) => {
   // Разрешаем только POST
   if (req.method !== 'POST') {
@@ -17,8 +24,7 @@ module.exports = async (req, res) => {
   }
 
   try {
-    // Аккуратно читаем тело: в Vercel оно уже распарсено,
-    // но на всякий случай поддержим и строку.
+    // Тело запроса (на всякий случай поддержим строку)
     let body = req.body || {};
     if (typeof body === 'string') {
       try { body = JSON.parse(body); } catch (_) { body = {}; }
@@ -28,18 +34,16 @@ module.exports = async (req, res) => {
     const customer = body.customer || {};
     const delivery = body.delivery || {};
 
-    // Пересчёт корзины на сервере
-    const priced = await priceAndValidate(cart);
-    const items = priced.items;
-    const total = priced.total;
+    // Серверный пересчёт корзины
+    const { items, total } = await priceAndValidate(cart);
 
-    // Тело платежа для YooKassa (metadata — только ПЛОСКИЕ строки/числа)
+    // Готовим платёж (metadata — только плоские строки/числа!)
     const payment = {
       amount: { value: String(total.toFixed(2)), currency: 'RUB' },
       capture: true,
       confirmation: {
         type: 'redirect',
-        return_url: String(process.env.BASE_URL || '') + '/thankyou.html'
+        return_url: String(getEnv('BASE_URL')) + '/thankyou.html'
       },
       description: 'NGT Order ' + Date.now(),
       receipt: {
@@ -61,16 +65,20 @@ module.exports = async (req, res) => {
         delivery_type: delivery.type || '',
         delivery_address: delivery.address || '',
         delivery_comment: delivery.comment || '',
-        items: items.map(function (x) {
-          return x.id + ':' + x.title + '×' + x.qty + '=' + x.price;
-        }).join('; ')
+        items: items.map((x) => x.id + ':' + x.title + '×' + x.qty + '=' + x.price).join('; ')
       }
     };
 
+    // --- Авторизация YooKassa ---
+    const shopId = getEnv('YOOKASSA_SHOP_ID');
+    const secret = getEnv('YOOKASSA_SECRET_KEY');
+    if (!/^\d+$/.test(shopId) || secret.length < 20) {
+      return badCreds(res, shopId, secret);
+    }
+    const auth = Buffer.from(shopId + ':' + secret).toString('base64');
+
+    // Идемпотентность
     const idemKey = crypto.randomUUID();
-    const auth = Buffer.from(
-      String(process.env.YOOKASSA_SHOP_ID || '') + ':' + String(process.env.YOOKASSA_SECRET_KEY || '')
-    ).toString('base64');
 
     // Запрос в YooKassa
     const resp = await fetchFn('https://api.yookassa.ru/v3/payments', {
@@ -78,7 +86,8 @@ module.exports = async (req, res) => {
       headers: {
         'Content-Type': 'application/json',
         'Idempotence-Key': idemKey,
-        'Authorization': 'Basic ' + auth
+        'Authorization': 'Basic ' + auth,
+        'User-Agent': 'NGT-SITE/1.0 (newgrgytimes)'
       },
       body: JSON.stringify(payment)
     });
@@ -89,10 +98,10 @@ module.exports = async (req, res) => {
       return res.status(resp.status).json(data);
     }
 
-    // Отдаём фронту ссылку для редиректа
+    // Ответ фронту
     return res.status(200).json({
       payment_id: data.id,
-      confirmation_url: data && data.confirmation ? data.confirmation.confirmation_url : ''
+      confirmation_url: data?.confirmation?.confirmation_url || ''
     });
   } catch (err) {
     console.error('create-payment error:', err);
@@ -100,9 +109,7 @@ module.exports = async (req, res) => {
   }
 };
 
-/**
- * Серверный пересчёт корзины и валидация
- */
+/** ----- server-side pricing/validation ----- */
 async function priceAndValidate(cart) {
   const inventory = await getInventory();
 
@@ -129,12 +136,10 @@ async function priceAndValidate(cart) {
   });
 
   const total = items.reduce(function (sum, it) { return sum + it.lineTotal; }, 0);
-  return { items: items, total: total };
+  return { items, total };
 }
 
-/**
- * Заглушка вместо БД/JSONBin. Подставишь своё чтение.
- */
+/** ----- inventory stub (замени на JSONBin/БД на сервере) ----- */
 async function getInventory() {
   return {
     'sku-001': { title: 'GRGY Cap', price: 1990, qty: 5,  vat_code: 1 },
