@@ -1936,6 +1936,10 @@ if (payBtn && !payBtn.dataset.ykBound) {
   });
 }
 
+document.querySelector('#pay-btn')?.addEventListener('click', (e) => {
+  e.preventDefault();
+  pay();
+})
 
 
 

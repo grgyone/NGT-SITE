@@ -38,8 +38,12 @@ export default async function handler(req, res) {
         }))
       },
       metadata: {
-        delivery,
-        items: items.map(({id, title, qty, price}) => ({id, title, qty, price}))
+      delivery_type: delivery.type || '',
+      delivery_address: delivery.address || '',
+       delivery_comment: delivery.comment || '',
+       items: items
+       .map(({ id, title, qty, price }) => `${id}:${title}×${qty}=${price}`)
+       .join('; ')
       }
     };
 
